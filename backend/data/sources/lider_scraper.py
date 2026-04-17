@@ -159,7 +159,7 @@ SINGLE_PRODUCT_QUERY = """query Product($id: String!, $prg: Prg!) {
 import random as _random
 
 # Fingerprints rotativos — PerimeterX detecta versiones fijas con el tiempo
-_FINGERPRINTS = ["chrome131", "chrome130", "chrome129", "chrome124", "chrome116", "chrome110"]
+_FINGERPRINTS = ["chrome136", "chrome133a", "chrome131", "chrome124", "chrome120", "chrome116"]
 
 def create_session():
     """Crea sesión curl_cffi con fingerprint Chrome aleatorio para evadir PerimeterX."""
