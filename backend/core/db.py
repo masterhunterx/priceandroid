@@ -146,18 +146,18 @@ def _apply_migrations(engine):
         ("branches",             "latitude",          "FLOAT",        None),
         ("branches",             "longitude",         "FLOAT",        None),
     ]
-    with engine.connect() as conn:
-        for table, column, col_type, default in migrations:
+    for table, column, col_type, default in migrations:
+        with engine.connect() as conn:
             try:
                 default_clause = f" DEFAULT {default}" if default else ""
                 conn.execute(
                     __import__("sqlalchemy").text(
-                        f"ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}"
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}{default_clause}"
                     )
                 )
                 conn.commit()
             except Exception:
-                pass  # Columna ya existe — ignorar
+                conn.rollback()  # Postgres requiere rollback antes de continuar
 
 
 def init_db():
