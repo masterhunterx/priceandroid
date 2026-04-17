@@ -37,9 +37,9 @@ _ai_fallback_count = 0
 MAX_FALLBACKS = 5
 
 try:
-    import requests
+    from curl_cffi import requests as cffi_requests
 except ImportError:
-    print("[ERROR] 'requests' library required. Install with: pip install requests")
+    print("[ERROR] 'curl_cffi' library required. Install with: pip install curl_cffi")
     sys.exit(1)
 
 
@@ -50,10 +50,20 @@ except ImportError:
 BASE_URL = "https://www.lider.cl"
 GRAPHQL_ENDPOINT = "https://super.lider.cl/orchestra/graphql/search"
 
+# Headers que imitan Chrome real para bypasear PerimeterX
 HEADERS = {
-    "User-Agent": "okhttp/4.12.0",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Content-Type": "application/json",
     "Accept": "application/json",
+    "Accept-Language": "es-CL,es;q=0.9",
+    "Origin": "https://www.lider.cl",
+    "Referer": "https://www.lider.cl/supermercado/search",
+    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site",
     "x-o-gql-query": "query Search",
     "X-APOLLO-OPERATION-NAME": "Search",
     "x-o-bu": "LIDER-CL",
@@ -61,7 +71,6 @@ HEADERS = {
     "x-o-platform": "rweb",
     "x-o-mart": "B2C",
     "x-o-segment": "oaoh",
-    "accept-language": "es-CL",
 }
 
 # Products per page (Walmart/Lider default)
@@ -148,8 +157,8 @@ SINGLE_PRODUCT_QUERY = """query Product($id: String!, $prg: Prg!) {
 # ---------------------------------------------------------------------------
 
 def create_session():
-    """Create a requests session with appropriate headers."""
-    session = requests.Session()
+    """Create a curl_cffi session with Chrome TLS impersonation para bypasear PerimeterX."""
+    session = cffi_requests.Session(impersonate="chrome124")
     session.headers.update(HEADERS)
     return session
 
