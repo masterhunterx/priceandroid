@@ -61,7 +61,7 @@ def _check_store(store_slug: str) -> tuple[bool, str]:
     try:
         mod = __import__(SCRAPERS[store_slug], fromlist=["create_session", "search_products"])
         session = mod.create_session()
-        results, total = mod.search_products(session, "leche", max_pages=1)
+        results = mod.search_products(session, "leche", max_pages=1)
         if results and len(results) > 0:
             return True, f"{len(results)} productos"
         return False, "0 resultados"
