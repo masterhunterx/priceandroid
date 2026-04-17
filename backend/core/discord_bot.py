@@ -317,9 +317,14 @@ async def on_message(message):
                     headers=netlify_headers, timeout=10,
                 )
                 deploys = r_deploys.json()
+                # Saltar deploys de mantenimiento (sin título) y el deploy actual
+                # Los deploys reales de la app siempre tienen un título (mensaje de commit/deploy)
                 restore_id = None
                 for dep in deploys:
-                    if dep.get("state") == "ready" and dep.get("id") and dep["id"] != current_deploy_id:
+                    if (dep.get("state") == "ready"
+                            and dep.get("id")
+                            and dep["id"] != current_deploy_id
+                            and dep.get("title")):  # solo deploys con título = app real
                         restore_id = dep["id"]
                         break
 
