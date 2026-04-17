@@ -133,6 +133,32 @@ def start_background_agents():
         threading.Thread(target=stock_scan_loop, name="StockScanAgent", daemon=True).start()
         logger.info("[StockAgent] Agente periódico de stock inicializado (cada 6h).")
 
+    # 4. QA Agent: Revisión continua de integridad de datos.
+    if not any(t.name == "QAAgent" for t in threading.enumerate()):
+        from agents.qa_agent import qa_agent_loop
+        threading.Thread(target=qa_agent_loop, name="QAAgent", daemon=True).start()
+        logger.info("[QAAgent] Monitor de integridad inicializado.")
+
+    # 5. Self-Healer: Auto-corrección de datos en BD cada 4h.
+    if not any(t.name == "SelfHealer" for t in threading.enumerate()):
+        from agents.self_healer import self_healer_loop
+        threading.Thread(target=self_healer_loop, name="SelfHealer", daemon=True).start()
+        logger.info("[SelfHealer] Auto-corrección de BD inicializada.")
+
+    # 6. Log Error Tracker: Detecta errores recurrentes en logs cada 24h.
+    if not any(t.name == "LogTracker" for t in threading.enumerate()):
+        from agents.log_tracker import log_tracker_loop
+        threading.Thread(target=log_tracker_loop, name="LogTracker", daemon=True).start()
+        logger.info("[LogTracker] Tracker de errores de log inicializado.")
+
+    # 7. Catalog Sync Scheduler: Resincronización periódica por tienda.
+    catalog_sync_threads = [t.name for t in threading.enumerate() if t.name.startswith("CatalogSync_")]
+    if not catalog_sync_threads:
+        from agents.catalog_sync_scheduler import start_catalog_sync_scheduler
+        start_catalog_sync_scheduler()
+        logger.info("[CatalogSync] Scheduler de resincronización por tienda inicializado.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """

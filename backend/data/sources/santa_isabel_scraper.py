@@ -123,6 +123,7 @@ def fetch_single_product(session, sku_id, store_id=None):
     """
     Fetch a specific product by its SKU from the Santa Isabel BFF API.
     Used for JIT (Just-In-Time) synchronization.
+    Returns None if product genuinely not found; raises on scraping errors.
     """
     payload = {
         "store": store_id or "pedrofontova",
@@ -137,23 +138,44 @@ def fetch_single_product(session, sku_id, store_id=None):
         "promotionalCards": False,
         "sponsoredProducts": False,
     }
-    try:
-        resp = session.post(BFF_SEARCH_ENDPOINT, json=payload, timeout=10)
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        products = data.get("products", [])
-        if not products:
-            return None
-        # Buscar el producto con el sku_id exacto
-        for p in products:
-            for item in p.get("items", []):
-                if str(item.get("itemId", "")) == str(sku_id):
-                    return normalize_product(p)
-        return normalize_product(products[0])
-    except Exception as e:
-        print(f"  [ERROR] Single product fetch failed: {e}")
-        return None
+    for attempt in range(2):
+        try:
+            resp = session.post(BFF_SEARCH_ENDPOINT, json=payload, timeout=15)
+
+            if resp.status_code in (403, 412, 429):
+                print(f"  [ERROR] Santa Isabel HTTP {resp.status_code} para SKU {sku_id} (intento {attempt+1})")
+                if attempt == 0:
+                    session = create_session()
+                    time.sleep(1)
+                    continue
+                raise ConnectionError(f"Santa Isabel HTTP {resp.status_code}: scraping bloqueado")
+
+            if resp.status_code >= 500:
+                raise ConnectionError(f"Santa Isabel server error HTTP {resp.status_code}")
+
+            if resp.status_code != 200:
+                raise ConnectionError(f"Santa Isabel HTTP inesperado {resp.status_code}")
+
+            data = resp.json()
+            products = data.get("products", [])
+            if not products:
+                return None  # Producto legítimamente no existe
+
+            for p in products:
+                for item in p.get("items", []):
+                    if str(item.get("itemId", "")) == str(sku_id):
+                        return normalize_product(p)
+            return normalize_product(products[0])
+
+        except ConnectionError:
+            raise
+        except Exception as e:
+            print(f"  [ERROR] Santa Isabel fetch_single_product (intento {attempt+1}): {e}")
+            if attempt == 0:
+                session = create_session()
+                time.sleep(1)
+                continue
+            raise ConnectionError(f"Santa Isabel fetch fallido tras 2 intentos: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +210,7 @@ def normalize_product(raw_product):
     # Pricing from modern item structure (BFF)
     price = item.get("price")
     list_price = item.get("listPrice")
-    available_qty = item.get("availableQuantity", 0)
+    available_qty = item.get("availableQuantity")  # None = field not present
 
     # NEW: Handle raw VTEX IO structure if BFF fields are missing (Playwright extraction)
     sellers = item.get("sellers", [])
@@ -199,15 +221,17 @@ def normalize_product(raw_product):
         if offer:
             price = offer.get("Price")
             list_price = offer.get("ListPrice")
-            available_qty = offer.get("AvailableQuantity", 0)
-        
+            if available_qty is None:
+                available_qty = offer.get("AvailableQuantity")
+
         # Alternative context path
         if price is None or price == 0:
             context = seller.get("commertialContext", {})
             if context:
                 price = context.get("Price")
                 list_price = context.get("ListPrice")
-                available_qty = context.get("availableQuantity", 0)
+                if available_qty is None:
+                    available_qty = context.get("availableQuantity")
                 
         # Final fallback
         if price is None or price == 0:
@@ -289,8 +313,8 @@ def normalize_product(raw_product):
         "has_discount": has_discount,
         "measurement_unit": measurement_unit,
         "unit_multiplier": unit_multiplier,
-        "in_stock": available_qty > 0 or (price is not None and price > 0),
-        "available_quantity": available_qty,
+        "in_stock": available_qty > 0 if available_qty is not None else (price is not None and price > 0),
+        "available_quantity": available_qty or 0,
         "cart_limit": raw_product.get("cartLimit"),
         "top_category": top_category,
         "category_path": category_path,

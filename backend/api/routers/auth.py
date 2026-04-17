@@ -13,7 +13,6 @@ import time
 import json
 import logging
 import threading
-import urllib.request
 from collections import defaultdict
 from threading import Lock
 from datetime import datetime, timedelta, timezone
@@ -96,6 +95,9 @@ if not ADMIN_APPROVE_KEY:
 _pending_approvals: dict = {}
 _approvals_lock = Lock()
 
+# Usuarios aprobados al menos una vez — no requieren re-aprobación hasta restart
+_approved_users: set = set()
+
 # {username: {"login_at": float, "last_seen": float}}
 _active_sessions: dict = {}
 _sessions_lock = Lock()
@@ -105,17 +107,20 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # ── Discord ────────────────────────────────────────────────────────────────────
 def _send_discord(message: str) -> None:
     if not DISCORD_WEBHOOK:
+        logger.warning("[AUTH] DISCORD_WEBHOOK_URL no configurada — notificación omitida.")
         return
     def _post():
         try:
-            data = json.dumps({"content": message}).encode()
-            req = urllib.request.Request(
+            import requests as _requests
+            r = _requests.post(
                 DISCORD_WEBHOOK,
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
+                json={"content": message},
+                timeout=10,
             )
-            urllib.request.urlopen(req, timeout=5)
+            if r.status_code not in (200, 204):
+                logger.warning(f"[AUTH] Discord respondió {r.status_code}: {r.text[:200]}")
+            else:
+                logger.info("[AUTH] Notificación Discord enviada OK.")
         except Exception as e:
             logger.warning(f"[AUTH] Discord notification failed: {e}")
     threading.Thread(target=_post, daemon=True).start()
@@ -140,6 +145,10 @@ def _start_session(username: str) -> None:
     except Exception:
         pass
     _update_session_metrics()
+    _send_discord(
+        f"🟢 **Sesión iniciada — FreshCart**\n"
+        f"👤 Usuario: `{username}` · ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
 
 def _end_session(username: str) -> None:
     duration = 0.0
@@ -154,6 +163,11 @@ def _end_session(username: str) -> None:
         except Exception:
             pass
     _update_session_metrics()
+    mins = round(duration / 60, 1)
+    _send_discord(
+        f"🔴 **Sesión cerrada — FreshCart**\n"
+        f"👤 Usuario: `{username}` · ⏱ Duración: `{mins} min` · ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
 
 def _touch_session(username: str) -> None:
     with _sessions_lock:
@@ -235,6 +249,12 @@ def login(body: LoginRequest, request: Request):
         return JSONResponse(content={"success": True, "data": _issue_tokens(username)})
 
     # 4. Test user → flujo de aprobación
+    # Si ya fue aprobado antes en esta sesión del servidor, acceso directo
+    if username in _approved_users:
+        _start_session(username)
+        logger.info(f"[AUTH] Login directo (ya aprobado): {username}")
+        return JSONResponse(content={"success": True, "data": _issue_tokens(username)})
+
     with _approvals_lock:
         approval = _pending_approvals.get(username)
 
@@ -255,8 +275,9 @@ def login(body: LoginRequest, request: Request):
             logger.info(f"[AUTH] Aprobación solicitada para: {username}")
 
         elif approval["approved"]:
-            # Ya aprobado: emitir tokens
+            # Ya aprobado: guardar en set permanente y emitir tokens
             _pending_approvals.pop(username, None)
+            _approved_users.add(username)
             _start_session(username)
             logger.info(f"[AUTH] Login exitoso (aprobado): {username}")
             return JSONResponse(content={"success": True, "data": _issue_tokens(username)})

@@ -445,3 +445,20 @@ class Feedback(Base):
 
     def __repr__(self):
         return f"<Feedback(id={self.id}, type='{self.type}', status='{self.status}')>"
+
+
+class IdeaAdmin(Base):
+    """
+    Ideas enviadas por el admin desde Discord para mejorar el sistema.
+    """
+    __tablename__ = "ideas_admin"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    idea        = Column(Text, nullable=False)
+    status      = Column(String(20), default="pendiente")   # pendiente | en_progreso | implementada | descartada
+    source      = Column(String(50), default="discord")     # discord | app
+    created_at  = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at  = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    def __repr__(self):
+        return f"<IdeaAdmin(id={self.id}, status='{self.status}')>"

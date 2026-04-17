@@ -167,30 +167,56 @@ def fetch_single_product(session, product_id, store_id=None):
     """
     Fetch a specific product by its ID from the Lider GraphQL API.
     Used for JIT (Just-In-Time) synchronization.
+    Returns None if product genuinely not found; raises on scraping errors.
     """
     variables = {
         "id": str(product_id),
         "prg": "mWeb",
     }
     payload = {"query": SINGLE_PRODUCT_QUERY, "variables": variables}
-    
+
     request_headers = {}
     if store_id:
         request_headers["x-o-store"] = str(store_id)
-        
-    try:
-        response = session.post(GRAPHQL_ENDPOINT, json=payload, headers=request_headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        product_data = data.get("data", {}).get("product")
-        if not product_data:
-            return None
-            
-        return normalize_product(product_data)
-    except Exception as e:
-        print(f"  [ERROR] Single product fetch failed: {e}")
-        return None
+
+    for attempt in range(2):
+        try:
+            response = session.post(GRAPHQL_ENDPOINT, json=payload, headers=request_headers, timeout=15)
+
+            if response.status_code in (400, 403, 412, 429):
+                print(f"  [ERROR] Lider HTTP {response.status_code} para producto {product_id} (intento {attempt+1})")
+                if attempt == 0:
+                    # Reintentar con sesión fresca
+                    session = create_session()
+                    time.sleep(1)
+                    continue
+                raise ConnectionError(f"Lider HTTP {response.status_code}: scraping bloqueado")
+
+            response.raise_for_status()
+            data = response.json()
+
+            if "errors" in data:
+                gql_errors = data["errors"]
+                print(f"  [ERROR] Lider GraphQL errors: {gql_errors}")
+                raise ValueError(f"GraphQL error: {gql_errors[0].get('message', 'unknown')}")
+
+            product_data = data.get("data", {}).get("product")
+            if not product_data:
+                return None  # Producto legítimamente no existe
+
+            return normalize_product(product_data)
+
+        except ConnectionError:
+            raise
+        except ValueError:
+            raise
+        except Exception as e:
+            print(f"  [ERROR] Lider fetch_single_product (intento {attempt+1}): {e}")
+            if attempt == 0:
+                session = create_session()
+                time.sleep(1)
+                continue
+            raise ConnectionError(f"Lider fetch fallido tras 2 intentos: {e}")
 
 
 def fetch_products_page(session, query, page, store_id=None):
@@ -349,7 +375,7 @@ def normalize_product(raw_product):
         "has_discount": has_discount,
         "measurement_unit": measurement_unit,
         "unit_multiplier": 1,
-        "in_stock": in_stock or (current_price is not None and current_price > 0),
+        "in_stock": in_stock if availability else (current_price is not None and current_price > 0),
         "available_quantity": None,
         "cart_limit": None,
         "top_category": top_category,

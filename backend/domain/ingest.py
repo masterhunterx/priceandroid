@@ -150,6 +150,7 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
                 price_updates_total.labels(store=store.slug).inc()
             return True
         else:
+            # Producto legítimamente no encontrado (scraper devolvió None explícito)
             print(f"    [JIT] Producto no encontrado en {store.name}. Marcando como Agotado.")
             sp.in_stock = False
             sp.last_sync = datetime.now(UTC)
@@ -157,6 +158,16 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
             if _has_metrics:
                 sync_operations_total.labels(store=store.slug, result="not_found").inc()
             return True
+    except (ConnectionError, ValueError) as e:
+        # Error de scraping (bloqueado, rate limit, GraphQL error) — NO marcar agotado
+        print(f"    [JIT SCRAPER ERROR] {store.name} bloqueó la request para ID {sp.id}: {e}")
+        db_session.rollback()
+        try:
+            from core.metrics import sync_operations_total
+            sync_operations_total.labels(store=store.slug, result="error").inc()
+        except Exception:
+            pass
+        return False
     except Exception as e:
         print(f"    [JIT ERROR] Falló la sincronización para ID {sp.id}: {e}")
         db_session.rollback()

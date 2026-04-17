@@ -209,7 +209,7 @@ def normalize_product(raw_product):
         current_price = float(multipack_unit_price)
 
     promo_price = parse_chilean_price(raw_discount_price)
-    available_qty = price_data.get("availableQuantity", 0)
+    available_qty = price_data.get("availableQuantity")  # None = field not present
 
     # Determine effective price and discount
     in_offer = price_data.get("inOffer", False) or bool(multipack_unit_price)
@@ -296,8 +296,8 @@ def normalize_product(raw_product):
         "has_discount": has_discount,
         "measurement_unit": measurement_unit,
         "unit_multiplier": unit_multiplier,
-        "in_stock": available_qty > 0 or (current_price is not None and current_price > 0), # Trust price if available
-        "available_quantity": available_qty,
+        "in_stock": available_qty > 0 if available_qty is not None else (current_price is not None and current_price > 0),
+        "available_quantity": available_qty or 0,
         "cart_limit": item.get("cartLimit"),
         "top_category": top_category,
         "category_path": category_path,

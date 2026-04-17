@@ -252,7 +252,7 @@ def normalize_product(raw_product):
         ),
         "measurement_unit": item.get("measurementUnit", ""),
         "unit_multiplier": item.get("unitMultiplier", 1),
-        "in_stock": item.get("stock", False) or (price is not None and price > 0),
+        "in_stock": bool(item.get("stock")) if item.get("stock") is not None else (price is not None and price > 0),
         "cart_limit": item.get("cartLimit"),
         "top_category": top_category,
         "category_path": category_path,
