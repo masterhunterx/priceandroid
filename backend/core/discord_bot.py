@@ -162,28 +162,71 @@ async def on_message(message):
             await message.channel.send("No tienes permisos para usar este comando.")
             return
         try:
-            from .models import StoreProduct, Feedback, IdeaAdmin
-            from sqlalchemy import func as _func
-            import time as _time
+            from .models import StoreProduct, Feedback, Store, Price
+            from sqlalchemy import func as _func, text as _text
+            from datetime import datetime, timezone, timedelta
+
+            now = datetime.now(timezone.utc)
+            cutoff_48h = now - timedelta(hours=48)
+            cutoff_6h  = now - timedelta(hours=6)
+
             with get_session() as s:
-                total_p = s.query(_func.count(StoreProduct.id)).scalar()
-                oos = s.query(_func.count(StoreProduct.id)).filter(StoreProduct.in_stock == False).scalar()
-                pending_fb = s.query(_func.count(Feedback.id)).filter(Feedback.status == "pending").scalar()
-                total_ideas = s.query(_func.count(IdeaAdmin.id)).scalar()
-            from api.routers.auth import _active_sessions
-            activos = len(_active_sessions)
+                total_p    = s.query(_func.count(StoreProduct.id)).scalar() or 0
+                oos        = s.query(_func.count(StoreProduct.id)).filter(StoreProduct.in_stock == False).scalar() or 0
+                stale      = s.query(_func.count(StoreProduct.id)).filter(
+                                StoreProduct.in_stock == True,
+                                (StoreProduct.last_sync == None) | (StoreProduct.last_sync < cutoff_48h)
+                             ).scalar() or 0
+                pending_fb = s.query(_func.count(Feedback.id)).filter(Feedback.status == "pending").scalar() or 0
+
+                # Syncs exitosas últimas 6h — contar precios scrapeados por tienda
+                syncs_ok = s.execute(_text("""
+                    SELECT st.slug, COUNT(p.id)
+                    FROM prices p
+                    JOIN store_products sp ON p.store_product_id = sp.id
+                    JOIN stores st ON sp.store_id = st.id
+                    WHERE p.scraped_at >= :cutoff
+                    GROUP BY st.slug
+                    ORDER BY st.slug
+                """), {"cutoff": cutoff_6h}).fetchall()
+
+            # Syncs fallidas — leer directamente de los contadores Prometheus en memoria
+            sync_errors   = {}  # {store: count}
+            sync_notfound = {}
+            try:
+                from core.metrics import sync_operations_total
+                for sample in sync_operations_total.collect()[0].samples:
+                    store  = sample.labels.get("store", "?")
+                    result = sample.labels.get("result", "")
+                    val    = int(sample.value)
+                    if result == "error":
+                        sync_errors[store]   = sync_errors.get(store, 0) + val
+                    elif result == "not_found":
+                        sync_notfound[store] = sync_notfound.get(store, 0) + val
+            except Exception:
+                pass
+
+            ok_lines  = "\n".join(f"  {slug:<14} {cnt:>6,}" for slug, cnt in syncs_ok) or "  (sin datos)"
+            err_lines = "\n".join(
+                f"  {s:<14} err:{sync_errors.get(s,0):>5,}  not_found:{sync_notfound.get(s,0):>6,}"
+                for s in ["jumbo", "lider", "santa_isabel", "unimarc"]
+            )
+
             await message.channel.send(
-                f"**Estadisticas FreshCart:**\n"
+                f"**📊 Estado FreshCart — {now.strftime('%d/%m %H:%M')} UTC**\n"
                 f"```\n"
-                f"Productos totales  : {total_p:,}\n"
-                f"Sin stock          : {oos:,}\n"
-                f"Feedback pendiente : {pending_fb}\n"
-                f"Ideas guardadas    : {total_ideas}\n"
-                f"Usuarios activos   : {activos}\n"
+                f"Total productos       : {total_p:>7,}\n"
+                f"Sin sincronizar >48h  : {stale:>7,}\n"
+                f"Sin stock             : {oos:>7,}\n"
+                f"Feedback pendiente    : {pending_fb:>7,}\n"
+                f"\n"
+                f"Syncs exitosas (6h):\n{ok_lines}\n"
+                f"\n"
+                f"Syncs fallidas (acum.):\n{err_lines}\n"
                 f"```"
             )
         except Exception as e:
-            await message.channel.send(f"Error: {e}")
+            await message.channel.send(f"Error al obtener stats: {e}")
         return
 
     # ── !frontend ──────────────────────────────────────────────────────────────
