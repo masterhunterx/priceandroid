@@ -156,10 +156,26 @@ SINGLE_PRODUCT_QUERY = """query Product($id: String!, $prg: Prg!) {
 # Core API functions
 # ---------------------------------------------------------------------------
 
+import random as _random
+
+# Fingerprints rotativos — PerimeterX detecta versiones fijas con el tiempo
+_FINGERPRINTS = ["chrome131", "chrome130", "chrome129", "chrome124", "chrome116", "chrome110"]
+
 def create_session():
-    """Create a curl_cffi session with Chrome TLS impersonation para bypasear PerimeterX."""
-    session = cffi_requests.Session(impersonate="chrome124")
-    session.headers.update(HEADERS)
+    """Crea sesión curl_cffi con fingerprint Chrome aleatorio para evadir PerimeterX."""
+    fp = _random.choice(_FINGERPRINTS)
+    session = cffi_requests.Session(impersonate=fp)
+    # Variar ligeramente el User-Agent según el fingerprint elegido
+    version = fp.replace("chrome", "")
+    headers = dict(HEADERS)
+    headers["User-Agent"] = (
+        f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        f"(KHTML, like Gecko) Chrome/{version}.0.0.0 Safari/537.36"
+    )
+    headers["sec-ch-ua"] = (
+        f'"Chromium";v="{version}", "Google Chrome";v="{version}", "Not-A.Brand";v="99"'
+    )
+    session.headers.update(headers)
     return session
 
 
@@ -179,16 +195,16 @@ def fetch_single_product(session, product_id, store_id=None):
     if store_id:
         request_headers["x-o-store"] = str(store_id)
 
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             response = session.post(GRAPHQL_ENDPOINT, json=payload, headers=request_headers, timeout=15)
 
             if response.status_code in (400, 403, 412, 429):
                 print(f"  [ERROR] Lider HTTP {response.status_code} para producto {product_id} (intento {attempt+1})")
-                if attempt == 0:
-                    # Reintentar con sesión fresca
+                if attempt < 2:
+                    # Nueva sesión con fingerprint diferente + backoff exponencial
                     session = create_session()
-                    time.sleep(1)
+                    time.sleep(2 ** attempt + _random.uniform(0.5, 1.5))
                     continue
                 raise ConnectionError(f"Lider HTTP {response.status_code}: scraping bloqueado")
 

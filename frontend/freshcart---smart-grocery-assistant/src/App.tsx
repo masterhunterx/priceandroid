@@ -19,6 +19,7 @@ import ShoppingAssistant from './pages/ShoppingAssistant';
 import Cart from './pages/Cart';
 import { CartProvider } from './context/CartContext';
 import FeedbackButton from './components/FeedbackButton';
+import OnboardingTour from './components/OnboardingTour';
 
 const PageTransition = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -104,6 +105,7 @@ const AppContent: React.FC = () => {
         </AnimatePresence>
         {isAuthenticated && !isLoginPage && <BottomNav />}
         {isAuthenticated && !isLoginPage && <FeedbackButton />}
+        {isAuthenticated && !isLoginPage && <OnboardingTour />}
         <Toaster position="top-center" reverseOrder={false} />
       </div>
     </>

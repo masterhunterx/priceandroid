@@ -9,6 +9,10 @@ interface MealPlanItem {
   query: string;
   price: number | null;
   status: 'found' | 'not_found';
+  image_url?: string;
+  brand?: string;
+  qty?: number;
+  total?: number | null;
 }
 
 interface MealPlanStore {

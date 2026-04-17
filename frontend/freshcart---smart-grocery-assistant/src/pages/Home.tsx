@@ -5,12 +5,13 @@ import { Deal, Category, Notification, Branch } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface HistoricLow {
-  id: number;
-  name: string;
-  best_price: number | null;
-  image_url: string;
-  best_store: string;
-  best_store_slug: string;
+  product_id: number;
+  product_name: string;
+  min_price_all_time: number | null;
+  image_url?: string;
+  store_name: string;
+  store_slug?: string;
+  brand?: string;
   savings_pct?: number;
 }
 import StoreLogo from '../components/StoreLogo';
@@ -196,6 +197,7 @@ const Home: React.FC = () => {
               const q = (e.currentTarget.elements.namedItem('search') as HTMLInputElement).value;
               if (q) navigate(`/search?q=${q}`);
             }}
+            data-tour="search"
             className="flex w-full items-stretch rounded-xl h-12 shadow-sm bg-white dark:bg-[#1a2e22]"
           >
             <div className="text-primary flex items-center justify-center pl-4">

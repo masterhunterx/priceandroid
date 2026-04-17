@@ -158,6 +158,25 @@ def start_background_agents():
         start_catalog_sync_scheduler()
         logger.info("[CatalogSync] Scheduler de resincronización por tienda inicializado.")
 
+    # 8. Scraper Health Agent: health check + retry automático de not_found.
+    health_threads = [t.name for t in threading.enumerate() if t.name in ("ScraperHealthCheck", "ScraperRetry")]
+    if len(health_threads) < 2:
+        from agents.scraper_health_agent import start_scraper_health_agent
+        start_scraper_health_agent()
+        logger.info("[HealthAgent] Agente de salud de scrapers inicializado.")
+
+    # 9. Security Audit Agent: escaneo de vulnerabilidades cada 6h.
+    if not any(t.name == "SecAudit" for t in threading.enumerate()):
+        from agents.security_audit_agent import security_audit_loop
+        threading.Thread(target=security_audit_loop, name="SecAudit", daemon=True).start()
+        logger.info("[SecAudit] Agente de auditoría de seguridad inicializado.")
+
+    # 10. Security Healer Agent: auto-corrección de reportes cada 1h.
+    if not any(t.name == "SecHealer" for t in threading.enumerate()):
+        from agents.security_healer_agent import security_healer_loop
+        threading.Thread(target=security_healer_loop, name="SecHealer", daemon=True).start()
+        logger.info("[SecHealer] Agente de auto-corrección de seguridad inicializado.")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -258,7 +277,7 @@ _base_origins = [
     "http://localhost:3000",
     "capacitor://localhost",   # APK Capacitor (Android/iOS)
     "ionic://localhost",        # Ionic Capacitor
-    "https://dancing-nougat-071a55.netlify.app",  # Netlify production frontend
+    "https://freshcart-app-beryl.vercel.app",      # Vercel production frontend
 ]
 # Orígenes adicionales de producción configurados vía env var (ej: URL de Railway del frontend)
 _extra = os.getenv("ALLOWED_ORIGINS", "")
@@ -294,6 +313,45 @@ async def security_headers_middleware(request, call_next):
 # --- MANEJADORES DE EXCEPCIONES GLOBALES ---
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
+
+# --- BLOQUEO DE BD (control en tiempo real desde Discord) ---
+from core.db_lock import is_locked, set_locked
+
+@app.middleware("http")
+async def db_lock_middleware(request, call_next):
+    safe_paths = {"/", "/metrics", "/internal/db/lock", "/internal/db/unlock",
+                  "/internal/db/status", "/api/auth/login", "/api/auth/refresh"}
+    if is_locked() and request.url.path not in safe_paths:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"detail": "Servicio en mantenimiento. Intenta más tarde."})
+    return await call_next(request)
+
+_INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
+
+@app.post("/internal/db/lock")
+async def db_lock(request):
+    token = request.headers.get("X-Internal-Token", "")
+    if not _INTERNAL_SECRET or token != _INTERNAL_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    set_locked(True)
+    logger.warning("[DB-LOCK] Base de datos bloqueada via endpoint interno.")
+    return {"status": "locked"}
+
+@app.post("/internal/db/unlock")
+async def db_unlock(request):
+    token = request.headers.get("X-Internal-Token", "")
+    if not _INTERNAL_SECRET or token != _INTERNAL_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    set_locked(False)
+    logger.info("[DB-LOCK] Base de datos desbloqueada via endpoint interno.")
+    return {"status": "unlocked"}
+
+@app.get("/internal/db/status")
+async def db_status(request):
+    token = request.headers.get("X-Internal-Token", "")
+    if not _INTERNAL_SECRET or token != _INTERNAL_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return {"locked": is_locked()}
 
 # --- INCLUSIÓN DE ROUTERS MODULARES (Protegidos internamente por API Key) ---
 app.include_router(auth.router)        # Público — login/refresh/me

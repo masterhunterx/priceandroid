@@ -112,13 +112,22 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
     
     print(f"  [JIT] Sincronizando {store.name}: {sp.name[:40]} (Sucursal: {ext_branch_id or 'Fija'})...")
     
+    # Circuit breaker: no intentar si la tienda está bloqueada por errores repetidos
+    try:
+        from core.circuit_breaker import is_open
+        if is_open(store.slug):
+            logger.debug(f"[JIT] Circuito abierto para {store.slug} — omitiendo sync de {sp.id}")
+            return False
+    except Exception:
+        pass
+
     result = None
     try:
         if store.slug == "jumbo":
             from data.sources.jumbo_scraper import create_session, fetch_single_product
             session = create_session()
             result = fetch_single_product(session, sp.sku_id, store_id=ext_branch_id)
-            
+
         elif store.slug == "lider":
             from data.sources.lider_scraper import create_session, fetch_single_product
             session = create_session()
@@ -127,7 +136,7 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
         elif store.slug == "santa_isabel":
             from data.sources.santa_isabel_scraper import create_session, fetch_single_product
             session = create_session()
-            result = fetch_single_product(session, sp.sku_id, store_id=ext_branch_id)
+            result = fetch_single_product(session, sp.sku_id, store_id=ext_branch_id, product_name=sp.name)
 
         elif store.slug == "unimarc":
             from data.sources.unimarc_scraper import create_session, fetch_single_product
@@ -148,9 +157,13 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
             if _has_metrics:
                 sync_operations_total.labels(store=store.slug, result="success").inc()
                 price_updates_total.labels(store=store.slug).inc()
+            try:
+                from core.circuit_breaker import record_success
+                record_success(store.slug)
+            except Exception:
+                pass
             return True
         else:
-            # Producto legítimamente no encontrado (scraper devolvió None explícito)
             print(f"    [JIT] Producto no encontrado en {store.name}. Marcando como Agotado.")
             sp.in_stock = False
             sp.last_sync = datetime.now(UTC)
@@ -159,9 +172,22 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
                 sync_operations_total.labels(store=store.slug, result="not_found").inc()
             return True
     except (ConnectionError, ValueError) as e:
-        # Error de scraping (bloqueado, rate limit, GraphQL error) — NO marcar agotado
         print(f"    [JIT SCRAPER ERROR] {store.name} bloqueó la request para ID {sp.id}: {e}")
         db_session.rollback()
+        try:
+            from core.circuit_breaker import record_failure
+            tripped = record_failure(store.slug)
+            if tripped:
+                import os, requests as _rq
+                wh = os.getenv("DISCORD_WEBHOOK_URL", "")
+                if wh:
+                    _rq.post(wh, json={"content": (
+                        f"⚡ **[CircuitBreaker] {store.slug.upper()} bloqueado**\n"
+                        f"Demasiados errores consecutivos. Sync pausado 2h.\n"
+                        f"Último error: `{str(e)[:120]}`"
+                    )}, timeout=8)
+        except Exception:
+            pass
         try:
             from core.metrics import sync_operations_total
             sync_operations_total.labels(store=store.slug, result="error").inc()

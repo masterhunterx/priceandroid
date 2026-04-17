@@ -400,6 +400,29 @@ class SecurityLog(Base):
         return f"<SecurityLog(type='{self.event_type}', ip='{self.ip}')>"
 
 
+class SecurityReport(Base):
+    """
+    Reportes del Security Audit Agent.
+    Cada fila es un hallazgo con severidad, descripción y estado de corrección.
+    """
+    __tablename__ = "security_reports"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    created_at      = Column(DateTime, default=lambda: datetime.now(UTC))
+    severity        = Column(String(10), nullable=False)   # CRITICAL HIGH MEDIUM LOW INFO
+    category        = Column(String(50), nullable=False)   # AUTH CONFIG EXPOSURE INJECTION INFRA
+    title           = Column(String(200), nullable=False)
+    description     = Column(Text, nullable=False)
+    affected        = Column(String(100), default="")      # componente afectado
+    auto_fixable    = Column(Boolean, default=False)
+    fixed           = Column(Boolean, default=False)
+    fixed_at        = Column(DateTime, nullable=True)
+    fix_description = Column(Text, nullable=True)
+
+    def __repr__(self):
+        return f"<SecurityReport(severity='{self.severity}', title='{self.title[:40]}')>"
+
+
 class PantryItem(Base):
     """
     Tracks items in the user's pantry/fridge to predict restocking needs.

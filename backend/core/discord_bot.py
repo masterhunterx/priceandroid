@@ -192,14 +192,15 @@ async def on_message(message):
             await message.channel.send("No tienes permisos para usar este comando.")
             return
         import requests as _req
-        import hashlib, json as _json
-        NETLIFY_TOKEN   = os.getenv("NETLIFY_TOKEN", "")
-        NETLIFY_SITE_ID = os.getenv("NETLIFY_SITE_ID", "")
-        if not NETLIFY_TOKEN or not NETLIFY_SITE_ID:
-            await message.channel.send("NETLIFY_TOKEN o NETLIFY_SITE_ID no configurados.")
+        VERCEL_TOKEN      = os.getenv("VERCEL_TOKEN", "")
+        VERCEL_PROJECT_ID = os.getenv("VERCEL_PROJECT_ID", "")
+        VERCEL_TEAM_ID    = os.getenv("VERCEL_TEAM_ID", "")  # opcional, vacío si cuenta personal
+        if not VERCEL_TOKEN or not VERCEL_PROJECT_ID:
+            await message.channel.send("VERCEL_TOKEN o VERCEL_PROJECT_ID no configurados.")
             return
-        netlify_headers = {"Authorization": f"Bearer {NETLIFY_TOKEN}"}
-        parts = content.split()
+        v_headers = {"Authorization": f"Bearer {VERCEL_TOKEN}", "Content-Type": "application/json"}
+        team_qs   = f"&teamId={VERCEL_TEAM_ID}" if VERCEL_TEAM_ID else ""
+        parts  = content.split()
         action = parts[1].lower() if len(parts) > 1 else "status"
 
         MAINTENANCE_HTML = """\
@@ -253,96 +254,162 @@ async def on_message(message):
 </body>
 </html>"""
 
-        def _netlify_deploy_files(html: str) -> tuple[int, dict]:
-            """Deploya via file-digest API para garantizar Content-Type correcto."""
-            html_bytes = html.encode("utf-8")
-            sha1 = hashlib.sha1(html_bytes).hexdigest()
-            # 1. Crear deploy con manifiesto de archivos
-            r1 = _req.post(
-                f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys",
-                headers={**netlify_headers, "Content-Type": "application/json"},
-                json={"files": {"/index.html": sha1}, "async": False},
-                timeout=20,
+        def _vercel_list_deployments(limit: int = 10) -> list:
+            r = _req.get(
+                f"https://api.vercel.com/v6/deployments?projectId={VERCEL_PROJECT_ID}&limit={limit}&target=production{team_qs}",
+                headers=v_headers, timeout=15,
             )
-            if r1.status_code not in (200, 201):
-                return r1.status_code, r1.json()
-            deploy_id = r1.json()["id"]
-            # 2. Subir el archivo HTML
-            r2 = _req.put(
-                f"https://api.netlify.com/api/v1/deploys/{deploy_id}/files/index.html",
-                headers={**netlify_headers, "Content-Type": "application/octet-stream"},
-                data=html_bytes,
-                timeout=20,
+            return r.json().get("deployments", []) if r.status_code == 200 else []
+
+        def _vercel_promote(deploy_id: str) -> int:
+            r = _req.post(
+                f"https://api.vercel.com/v10/projects/{VERCEL_PROJECT_ID}/promote/{deploy_id}?{team_qs.lstrip('&')}",
+                headers=v_headers, timeout=15,
             )
-            return r2.status_code, r2.json() if r2.content else {}
+            return r.status_code
+
+        def _vercel_deploy_maintenance(html: str) -> tuple[int, str]:
+            """Crea un deploy de mantenimiento en Vercel con un solo archivo index.html."""
+            payload = {
+                "name": "freshcart-app",
+                "files": [{"file": "index.html", "data": html, "encoding": "utf-8"}],
+                "projectSettings": {"buildCommand": "", "outputDirectory": "", "framework": None},
+                "target": "production",
+            }
+            r = _req.post(
+                f"https://api.vercel.com/v13/deployments?{team_qs.lstrip('&')}",
+                headers=v_headers,
+                json=payload,
+                timeout=30,
+            )
+            data = r.json()
+            deploy_id = data.get("id", "")
+            return r.status_code, deploy_id
+
+        def _vercel_wait_ready(deploy_id: str, timeout_s: int = 60) -> bool:
+            """Espera hasta que el deploy esté en estado READY."""
+            import time as _time
+            deadline = _time.time() + timeout_s
+            while _time.time() < deadline:
+                r = _req.get(
+                    f"https://api.vercel.com/v13/deployments/{deploy_id}?{team_qs.lstrip('&')}",
+                    headers=v_headers, timeout=10,
+                )
+                state = r.json().get("status") or r.json().get("readyState", "")
+                if state in ("READY", "ready"):
+                    return True
+                if state in ("ERROR", "CANCELED"):
+                    return False
+                _time.sleep(3)
+            return False
 
         try:
             if action == "off":
-                r_site = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
-                prev_deploy_id = r_site.json().get("deploy_id", "")
+                # Guardar el deploy actual antes de reemplazarlo
+                deploys = _vercel_list_deployments(5)
+                prev_id = deploys[0]["uid"] if deploys else "desconocido"
 
-                status, data = _netlify_deploy_files(MAINTENANCE_HTML)
-                if status in (200, 201):
-                    await message.channel.send(
-                        f"Frontend **desactivado**. Pagina de mantenimiento activa.\n"
-                        f"`!frontend on` para restaurar (deploy anterior: `{prev_deploy_id[:12]}`)"
-                    )
-                    logger.info(f"[KAIROS BOT] Frontend desactivado. Anterior: {prev_deploy_id}")
+                await message.channel.send("⏳ Desplegando página de mantenimiento...")
+                status, new_id = _vercel_deploy_maintenance(MAINTENANCE_HTML)
+                if status in (200, 201) and new_id:
+                    ready = _vercel_wait_ready(new_id)
+                    if ready:
+                        await message.channel.send(
+                            f"🔴 Frontend **desactivado**. Página de mantenimiento activa.\n"
+                            f"`!frontend on` para restaurar (deploy anterior: `{prev_id[:16]}`)"
+                        )
+                        logger.info(f"[KAIROS BOT] Frontend desactivado. Deploy mantenimiento: {new_id}")
+                    else:
+                        await message.channel.send(f"⚠️ Deploy creado (`{new_id[:16]}`) pero tardó demasiado en estar listo. Verifica en Vercel.")
                 else:
-                    await message.channel.send(f"Error al desactivar: HTTP {status} — {str(data)[:200]}")
+                    await message.channel.send(f"Error al desactivar: HTTP {status}")
 
             elif action == "on":
-                r_site = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
-                current_deploy_id = r_site.json().get("deploy_id", "")
-                r_deploys = _req.get(
-                    f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys?per_page=15",
-                    headers=netlify_headers, timeout=10,
-                )
-                deploys = r_deploys.json()
-                # Saltar deploys de mantenimiento (sin título) y el deploy actual
-                # Los deploys reales de la app siempre tienen un título (mensaje de commit/deploy)
-                restore_id = None
-                for dep in deploys:
-                    if (dep.get("state") == "ready"
-                            and dep.get("id")
-                            and dep["id"] != current_deploy_id
-                            and dep.get("title")):  # solo deploys con título = app real
-                        restore_id = dep["id"]
+                deploys = _vercel_list_deployments(15)
+                # Saltar el deploy actual (index 0) y buscar el primero con meta de git (app real)
+                # Los deploys de mantenimiento no tienen gitSource ni commitMessage
+                restore_dep = None
+                for dep in deploys[1:]:
+                    if dep.get("meta", {}).get("githubCommitSha") or dep.get("meta", {}).get("gitlabCommitSha") or dep.get("name") == "freshcart-app" and dep.get("meta"):
+                        restore_dep = dep
                         break
+                # Fallback: tomar simplemente el segundo deploy disponible
+                if not restore_dep and len(deploys) > 1:
+                    restore_dep = deploys[1]
 
-                if not restore_id:
-                    await message.channel.send("No se encontro un deploy anterior para restaurar.")
+                if not restore_dep:
+                    await message.channel.send("No se encontró un deploy anterior para restaurar.")
                     return
 
-                r = _req.post(
-                    f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys/{restore_id}/restore",
-                    headers={**netlify_headers, "Content-Type": "application/json"},
-                    timeout=15,
-                )
-                if r.status_code == 200:
-                    await message.channel.send(f"Frontend **activado**. Deploy `{restore_id[:12]}` restaurado.")
+                restore_id = restore_dep["uid"]
+                await message.channel.send("⏳ Restaurando deploy anterior...")
+                status = _vercel_promote(restore_id)
+                if status in (200, 201, 204):
+                    ready = _vercel_wait_ready(restore_id)
+                    if ready:
+                        await message.channel.send(f"🟢 Frontend **activado**. Deploy `{restore_id[:16]}` activo en producción.")
+                    else:
+                        await message.channel.send(f"⚠️ Promote enviado pero el deploy tardó. Verifica en Vercel.")
                     logger.info(f"[KAIROS BOT] Frontend restaurado al deploy {restore_id}")
                 else:
-                    await message.channel.send(f"Error al activar: HTTP {r.status_code} — {r.text[:200]}")
+                    await message.channel.send(f"Error al activar: HTTP {status}")
 
             else:  # status
-                r = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
-                data = r.json()
-                url   = data.get("ssl_url") or data.get("url", "N/A")
-                state = data.get("state", "N/A")
-                deploy_id = data.get("deploy_id", "")[:12]
+                deploys = _vercel_list_deployments(1)
+                if deploys:
+                    dep   = deploys[0]
+                    uid   = dep.get("uid", "N/A")[:16]
+                    state = dep.get("state", "N/A")
+                    url   = dep.get("url", "N/A")
+                else:
+                    uid, state, url = "N/A", "N/A", "N/A"
                 await message.channel.send(
-                    f"**Estado del Frontend:**\n"
+                    f"**Estado del Frontend (Vercel):**\n"
                     f"```\n"
-                    f"URL      : {url}\n"
-                    f"State    : {state}\n"
-                    f"Deploy   : {deploy_id}\n"
+                    f"URL    : https://{url}\n"
+                    f"State  : {state}\n"
+                    f"Deploy : {uid}\n"
                     f"```\n"
-                    f"Usa `!frontend off` para modo mantenimiento o `!frontend on` para restaurar."
+                    f"Usa `!frontend off` para mantenimiento o `!frontend on` para restaurar."
                 )
         except Exception as e:
-            await message.channel.send(f"Error al contactar Netlify: {e}")
+            await message.channel.send(f"Error al contactar Vercel: {e}")
             logger.error(f"[KAIROS BOT] Error en !frontend: {e}")
+        return
+
+    # ── !db ────────────────────────────────────────────────────────────────────
+    if cmd.startswith("!db"):
+        if not _is_authorized(message.author):
+            await message.channel.send("No tienes permisos para usar este comando.")
+            return
+        from core.db_lock import is_locked, set_locked
+        parts  = content.split()
+        action = parts[1].lower() if len(parts) > 1 else "status"
+
+        try:
+            if action == "off":
+                set_locked(True)
+                await message.channel.send(
+                    "🔴 **Base de datos bloqueada.** La API rechaza todas las peticiones.\n"
+                    "Usa `!db on` para reactivar."
+                )
+                logger.warning("[KAIROS BOT] BD bloqueada por comando Discord.")
+
+            elif action == "on":
+                set_locked(False)
+                await message.channel.send("🟢 **Base de datos desbloqueada.** La API vuelve a operar con normalidad.")
+                logger.info("[KAIROS BOT] BD desbloqueada por comando Discord.")
+
+            else:  # status
+                locked = is_locked()
+                estado = "🔴 Bloqueada (modo emergencia)" if locked else "🟢 Activa — operando con normalidad"
+                await message.channel.send(
+                    f"**Estado de la BD:**\n```\n{estado}\n```\n"
+                    f"Usa `!db off` para bloquear o `!db on` para desbloquear."
+                )
+        except Exception as e:
+            await message.channel.send(f"Error en !db: {e}")
+            logger.error(f"[KAIROS BOT] Error en !db: {e}")
         return
 
     # ── !qa ────────────────────────────────────────────────────────────────────
@@ -402,6 +469,67 @@ async def on_message(message):
             logger.error(f"[KAIROS BOT] Error en !sync: {e}")
         return
 
+    # ── !security ──────────────────────────────────────────────────────────────
+    if cmd == "!security":
+        if not _is_authorized(message.author):
+            await message.channel.send("No tienes permisos para usar este comando.")
+            return
+        try:
+            from core.db import get_session
+            from core.models import SecurityReport
+            with get_session() as db:
+                reports = (
+                    db.query(SecurityReport)
+                    .filter(SecurityReport.fixed == False)
+                    .order_by(SecurityReport.created_at.desc())
+                    .limit(20)
+                    .all()
+                )
+                total_fixed = db.query(SecurityReport).filter(SecurityReport.fixed == True).count()
+
+            if not reports:
+                await message.channel.send(
+                    f"✅ **Sin reportes de seguridad pendientes.** ({total_fixed} corregidos en total)"
+                )
+                return
+
+            sev_emoji = {"CRITICAL": "🚨", "HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🔵", "INFO": "ℹ️"}
+            lines = [f"🔒 **Reportes de seguridad pendientes** ({len(reports)}) — {total_fixed} ya corregidos", ""]
+            for r in reports:
+                emoji = sev_emoji.get(r.severity, "⚪")
+                fix_tag = " `[auto-fix pendiente]`" if r.auto_fixable else ""
+                lines.append(f"{emoji} **[{r.severity}] {r.category}** — {r.title}{fix_tag}")
+                lines.append(f"  └ {r.description[:120]}{'...' if len(r.description) > 120 else ''}")
+            await message.channel.send("\n".join(lines)[:1900])
+        except Exception as e:
+            await message.channel.send(f"Error al consultar reportes: {e}")
+        return
+
+    # ── !cb ────────────────────────────────────────────────────────────────────
+    if cmd == "!cb":
+        if not _is_authorized(message.author):
+            await message.channel.send("No tienes permisos para usar este comando.")
+            return
+        try:
+            from core.circuit_breaker import get_all_status
+            status = get_all_status()
+            if not status:
+                await message.channel.send("No hay datos de circuit breakers aún (ninguna tienda ha sido monitoreada).")
+                return
+            icons = {"closed": "🟢", "open": "🔴", "half_open": "🟡"}
+            lines = ["**Circuit Breakers — Estado de tiendas:**", "```"]
+            for store, info in status.items():
+                icon  = icons.get(info["state"], "⚪")
+                state = info["state"].upper()
+                fails = info["failures"]
+                extra = f" — recupera en {info['recovers_in_min']}min" if info.get("recovers_in_min") else ""
+                lines.append(f"{icon} {store:<15} {state:<10} fallos: {fails}{extra}")
+            lines.append("```")
+            await message.channel.send("\n".join(lines))
+        except Exception as e:
+            await message.channel.send(f"Error al consultar circuit breakers: {e}")
+        return
+
     # ── !pin ───────────────────────────────────────────────────────────────────
     if cmd == "!pin":
         if not _is_authorized(message.author):
@@ -410,16 +538,32 @@ async def on_message(message):
         MENU = (
             "**KAIROS Bot — Comandos disponibles**\n"
             "```\n"
-            "!buscar <producto>  → Buscar precios en el catálogo\n"
-            "!idea <texto>       → Guardar una idea en la BD\n"
-            "!ideas              → Ver últimas 10 ideas guardadas\n"
-            "!feedback           → Ver reportes de usuarios\n"
-            "!usuarios           → Sesiones activas ahora\n"
-            "!passwords          → Contraseñas de usuarios de prueba\n"
+            "── Información ──────────────────────────────\n"
             "!stats              → Estadísticas del sistema\n"
+            "!usuarios           → Lista de usuarios registrados\n"
+            "!feedback           → Últimos reportes de usuarios\n"
+            "!ideas              → Ideas registradas\n"
+            "!idea <texto>       → Guardar una nueva idea\n"
+            "!buscar <producto>  → Buscar producto en el catálogo\n"
+            "\n"
+            "── Frontend (Vercel) ─────────────────────────\n"
+            "!frontend off       → Activar página de mantenimiento\n"
+            "!frontend on        → Restaurar app en producción\n"
+            "!frontend status    → Ver estado actual del frontend\n"
+            "\n"
+            "── Base de datos (Railway) ───────────────────\n"
+            "!db off             → Apagar BD (emergencia de seguridad)\n"
+            "!db on              → Reactivar BD\n"
+            "!db status          → Ver estado actual de la BD\n"
+            "\n"
+            "── Mantenimiento ─────────────────────────────\n"
             "!qa                 → Revisión manual de integridad de datos\n"
-            "!heal               → Auto-corregir problemas en la BD ahora\n"
-            "!sync <tienda>      → Resync manual de una tienda\n"
+            "!heal               → Auto-corregir problemas en la BD\n"
+            "!sync <tienda>      → Resync manual (jumbo/lider/unimarc/santa_isabel)\n"
+            "!cb                 → Estado de circuit breakers por tienda\n"
+            "!security           → Ver reportes de seguridad pendientes\n"
+            "\n"
+            "── Utilidades ────────────────────────────────\n"
             "!pin                → Fijar este menú en el canal\n"
             "!help               → Mostrar este menú\n"
             "```\n"
@@ -438,17 +582,36 @@ async def on_message(message):
     # ── !help ──────────────────────────────────────────────────────────────────
     if cmd == "!help":
         await message.channel.send(
-            "**KAIROS Bot -- Comandos disponibles:**\n"
+            "**KAIROS Bot — Comandos disponibles:**\n"
             "```\n"
-            "!buscar <producto>  -> Buscar precios en el catalogo\n"
-            "!idea <texto>       -> Guardar una idea en la BD\n"
-            "!ideas              -> Ver ultimas 10 ideas\n"
-            "!feedback           -> Ver feedback pendiente\n"
-            "!usuarios           -> Sesiones activas ahora\n"
-            "!passwords          -> Contrasenas de usuarios\n"
+            "── Información ──────────────────────────────\n"
             "!stats              -> Estadisticas del sistema\n"
+            "!usuarios           -> Lista de usuarios registrados\n"
+            "!feedback           -> Ultimos reportes de usuarios\n"
+            "!ideas              -> Ideas registradas\n"
+            "!idea <texto>       -> Guardar una nueva idea\n"
+            "!buscar <producto>  -> Buscar producto en el catalogo\n"
+            "\n"
+            "── Frontend (Vercel) ─────────────────────────\n"
+            "!frontend off       -> Activar pagina de mantenimiento\n"
+            "!frontend on        -> Restaurar app en produccion\n"
+            "!frontend status    -> Ver estado actual del frontend\n"
+            "\n"
+            "── Base de datos (Railway) ───────────────────\n"
+            "!db off             -> Apagar BD (emergencia de seguridad)\n"
+            "!db on              -> Reactivar BD\n"
+            "!db status          -> Ver estado actual de la BD\n"
+            "\n"
+            "── Mantenimiento ─────────────────────────────\n"
             "!qa                 -> Revision manual de integridad de datos\n"
-            "!help               -> Este menu\n"
+            "!heal               -> Auto-corregir problemas en la BD\n"
+            "!sync <tienda>      -> Resync manual (jumbo/lider/unimarc/santa_isabel)\n"
+            "!cb                 -> Estado de circuit breakers por tienda\n"
+            "!security           -> Ver reportes de seguridad pendientes\n"
+            "\n"
+            "── Utilidades ────────────────────────────────\n"
+            "!pin                -> Fijar menu en el canal\n"
+            "!help               -> Mostrar este menu\n"
             "```"
         )
         return

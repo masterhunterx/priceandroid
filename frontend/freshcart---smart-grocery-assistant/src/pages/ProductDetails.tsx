@@ -141,7 +141,7 @@ const ProductDetails: React.FC = () => {
   const handleAddToList = () => {
     if (!product) return;
     try {
-      const list: { id: number; name: string; price: number | null }[] =
+      const list: { id: number | string; name: string; price: number | null }[] =
         JSON.parse(localStorage.getItem('freshcart_shopping_list') || '[]');
       if (!list.find(item => item.id === product.id)) {
         list.push({ id: product.id, name: product.name, price: product.best_price });

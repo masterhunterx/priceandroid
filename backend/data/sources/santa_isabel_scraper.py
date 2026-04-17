@@ -119,55 +119,74 @@ def fetch_products_page(session, query, from_idx, to_idx, store_id="pedrofontova
         return [], 0
 
 
-def fetch_single_product(session, sku_id, store_id=None):
-    """
-    Fetch a specific product by its SKU from the Santa Isabel BFF API.
-    Used for JIT (Just-In-Time) synchronization.
-    Returns None if product genuinely not found; raises on scraping errors.
-    """
+def _si_search(session, full_text: str, store_id: str, to: int = 5):
+    """Ejecuta una búsqueda en el BFF de Santa Isabel y devuelve la lista de productos."""
     payload = {
-        "store": store_id or "pedrofontova",
+        "store": store_id,
         "collections": [],
-        "fullText": str(sku_id),
+        "fullText": full_text,
         "brands": [],
         "hideUnavailableItems": False,
         "from": 0,
-        "to": 5,
+        "to": to,
         "orderBy": "OrderByScoreDESC",
         "selectedFacets": [],
         "promotionalCards": False,
         "sponsoredProducts": False,
     }
+    resp = session.post(BFF_SEARCH_ENDPOINT, json=payload, timeout=15)
+    return resp
+
+
+def fetch_single_product(session, sku_id, store_id=None, product_name=None):
+    """
+    Fetch a specific product by its SKU from the Santa Isabel BFF API.
+    Used for JIT (Just-In-Time) synchronization.
+    Returns None if product genuinely not found; raises on scraping errors.
+
+    Estrategia de búsqueda:
+    1. Buscar por SKU exacto y verificar itemId
+    2. Si no hay match por SKU, buscar por nombre del producto (más confiable)
+    """
+    store = store_id or "pedrofontova"
+
+    def _try_search(query: str) -> list:
+        resp = _si_search(session, query, store, to=8)
+        if resp.status_code in (403, 412, 429):
+            raise ConnectionError(f"Santa Isabel HTTP {resp.status_code}: scraping bloqueado")
+        if resp.status_code >= 500:
+            raise ConnectionError(f"Santa Isabel server error HTTP {resp.status_code}")
+        if resp.status_code != 200:
+            raise ConnectionError(f"Santa Isabel HTTP inesperado {resp.status_code}")
+        return resp.json().get("products", [])
+
     for attempt in range(2):
         try:
-            resp = session.post(BFF_SEARCH_ENDPOINT, json=payload, timeout=15)
-
-            if resp.status_code in (403, 412, 429):
-                print(f"  [ERROR] Santa Isabel HTTP {resp.status_code} para SKU {sku_id} (intento {attempt+1})")
-                if attempt == 0:
-                    session = create_session()
-                    time.sleep(1)
-                    continue
-                raise ConnectionError(f"Santa Isabel HTTP {resp.status_code}: scraping bloqueado")
-
-            if resp.status_code >= 500:
-                raise ConnectionError(f"Santa Isabel server error HTTP {resp.status_code}")
-
-            if resp.status_code != 200:
-                raise ConnectionError(f"Santa Isabel HTTP inesperado {resp.status_code}")
-
-            data = resp.json()
-            products = data.get("products", [])
-            if not products:
-                return None  # Producto legítimamente no existe
-
+            # Intento 1: buscar por SKU y verificar itemId exacto
+            products = _try_search(str(sku_id))
             for p in products:
                 for item in p.get("items", []):
                     if str(item.get("itemId", "")) == str(sku_id):
                         return normalize_product(p)
-            return normalize_product(products[0])
+
+            # Intento 2: si hay nombre disponible, buscar por nombre y verificar SKU
+            if product_name:
+                # Usar las primeras 4 palabras para evitar búsquedas demasiado específicas
+                short_name = " ".join(product_name.split()[:4])
+                products_by_name = _try_search(short_name)
+                for p in products_by_name:
+                    for item in p.get("items", []):
+                        if str(item.get("itemId", "")) == str(sku_id):
+                            return normalize_product(p)
+                # Si encontró resultados por nombre pero ningún match exacto de SKU,
+                # no retornamos el primero para evitar datos incorrectos — es not_found real
+            return None
 
         except ConnectionError:
+            if attempt == 0:
+                session = create_session()
+                time.sleep(1)
+                continue
             raise
         except Exception as e:
             print(f"  [ERROR] Santa Isabel fetch_single_product (intento {attempt+1}): {e}")

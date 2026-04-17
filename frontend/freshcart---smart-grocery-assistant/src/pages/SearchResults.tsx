@@ -33,6 +33,7 @@ const SearchResults: React.FC = () => {
   const [results, setResults]       = useState<Product[]>([]);
   const [total, setTotal]           = useState(0);
   const [loading, setLoading]       = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [sort, setSort]             = useState('price_asc');
   const [store, setStore]           = useState(storeParam);
 
@@ -69,8 +70,9 @@ const SearchResults: React.FC = () => {
 
   // ── Execute search whenever query/sort/store changes ──────────────────────────
   useEffect(() => {
-    if (!query && !categoryParam) { setResults([]); setTotal(0); return; }
+    if (!query && !categoryParam) { setResults([]); setTotal(0); setSearchError(false); return; }
     let cancelled = false;
+    setSearchError(false);
     (async () => {
       setLoading(true);
       try {
@@ -80,8 +82,9 @@ const SearchResults: React.FC = () => {
         setResults(data.results);
         setTotal(data.total);
         if (query) saveRecentSearch(query);
-      } catch (e) {
+      } catch {
         if (cancelled) return;
+        setSearchError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -428,7 +431,14 @@ const SearchResults: React.FC = () => {
               <div key={i} className="h-40 w-full animate-pulse bg-slate-200 dark:bg-slate-800 rounded-xl" />
             ))}
 
-            {!loading && results.length === 0 && query && (
+            {!loading && searchError && (
+              <div className="flex flex-col items-center justify-center mt-20 text-center px-10">
+                <span className="material-symbols-outlined text-6xl text-red-300 mb-4">wifi_off</span>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Error de conexión</h3>
+                <p className="text-slate-500 mt-2">No se pudo conectar al servidor. Verifica tu conexión e intenta de nuevo.</p>
+              </div>
+            )}
+            {!loading && !searchError && results.length === 0 && query && (
               <div className="flex flex-col items-center justify-center mt-20 text-center px-10">
                 <span className="material-symbols-outlined text-6xl text-slate-300 mb-4">search_off</span>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Sin resultados para "{query}"</h3>

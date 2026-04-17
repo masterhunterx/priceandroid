@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { submitFeedback } from '../lib/api';
 
@@ -43,6 +43,7 @@ export default function FeedbackButton() {
   const [stage, setStage] = useState<Stage>('idle');
   const [type, setType] = useState<FeedbackType>('bug');
   const [text, setText] = useState('');
+  const isTesterMode = !!localStorage.getItem('freshcart_tester_mode');
   const [errorMsg, setErrorMsg] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -96,37 +97,60 @@ export default function FeedbackButton() {
 
   return (
     <>
-      {/* Floating trigger button */}
-      <button
-        onClick={open}
-        aria-label="Enviar feedback"
-        style={{
+      {/* Tester mode pulse ring */}
+      {isTesterMode && (
+        <div style={{
           position: 'fixed',
-          bottom: '80px',
-          left: '16px',
-          zIndex: 50,
-          width: '44px',
-          height: '44px',
+          bottom: isTesterMode ? '71px' : '80px',
+          left: '7px',
+          width: '62px',
+          height: '62px',
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 4px 14px rgba(99,102,241,0.5)',
-          transition: 'transform 0.15s, box-shadow 0.15s',
-          fontSize: '20px',
-        }}
-        onMouseEnter={e => {
-          (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)';
-        }}
-        onMouseLeave={e => {
-          (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
-        }}
-      >
-        💬
-      </button>
+          border: '2px solid rgba(99,102,241,0.7)',
+          zIndex: 49,
+          animation: 'testerPulse 1.8s ease-in-out infinite',
+          pointerEvents: 'none',
+        }} />
+      )}
+
+      {/* Floating trigger button */}
+      <div style={{ position: 'fixed', bottom: '80px', left: '16px', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+        {isTesterMode && (
+          <span style={{
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            color: '#fff', fontSize: '9px', fontWeight: 800,
+            padding: '2px 6px', borderRadius: '999px',
+            letterSpacing: '0.04em', whiteSpace: 'nowrap',
+          }}>
+            🧪 FEEDBACK
+          </span>
+        )}
+        <button
+          data-tour="feedback-btn"
+          onClick={open}
+          aria-label="Enviar feedback"
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: isTesterMode
+              ? '0 4px 20px rgba(99,102,241,0.7), 0 0 0 3px rgba(99,102,241,0.2)'
+              : '0 4px 14px rgba(99,102,241,0.5)',
+            transition: 'transform 0.15s, box-shadow 0.15s',
+            fontSize: '20px',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
+        >
+          💬
+        </button>
+      </div>
 
       {/* Modal overlay */}
       {(stage === 'open' || stage === 'sending' || stage === 'error') && (
@@ -297,6 +321,10 @@ export default function FeedbackButton() {
         @keyframes fadeIn {
           from { opacity: 0; transform: translateX(-50%) translateY(8px); }
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes testerPulse {
+          0%, 100% { transform: scale(1); opacity: 0.8; }
+          50% { transform: scale(1.35); opacity: 0; }
         }
       `}</style>
     </>

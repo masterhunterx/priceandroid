@@ -29,7 +29,7 @@ const BottomNav: React.FC = () => {
             } ${isActive(item.path) ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
           >
             {item.isCentral ? (
-              <div className={`size-14 rounded-full shadow-lg shadow-primary/40 flex items-center justify-center border-4 border-white dark:border-[#0a150f] ${
+              <div data-tour="kairos-btn" className={`size-14 rounded-full shadow-lg shadow-primary/40 flex items-center justify-center border-4 border-white dark:border-[#0a150f] ${
                 isActive(item.path) ? 'bg-white text-primary scale-110' : 'bg-primary text-background-dark'
               }`}>
                 <span className="material-symbols-outlined text-3xl font-black">{item.icon}</span>
