@@ -213,10 +213,11 @@ class Shield3:
         """
         ua = headers.get("user-agent", "").lower()
         
-        # Firmas de herramientas de scraping no deseadas o bots agresivos
+        # Firmas de herramientas de ataque automatizado — NO incluir curl/wget/postman/python-requests
+        # ya que son herramientas legítimas usadas en CI/CD, monitoreo y scripting.
         bot_signatures = [
-            "python-requests", "aiohttp", "selenium", "puppeteer", 
-            "headless", "postman", "curl", "wget", "sqlmap", "nikto"
+            "selenium", "puppeteer", "headless", "sqlmap", "nikto",
+            "scrapy", "masscan", "zgrab", "nuclei", "dirbuster",
         ]
         
         for sig in bot_signatures:

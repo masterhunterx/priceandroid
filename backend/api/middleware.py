@@ -18,18 +18,25 @@ if _JWT_SECRET == "insecure-default-change-in-production":
 def _verify_jwt(token: str) -> str:
     """
     Valida un JWT Bearer token y retorna el 'sub' (username).
-    Lanza HTTPException 401 si el token es inválido o expirado.
+    Lanza HTTPException 401 si el token es inválido, expirado o revocado.
     """
     import jwt
     from jwt.exceptions import InvalidTokenError
     try:
         payload = jwt.decode(token, _JWT_SECRET, algorithms=["HS256"])
     except InvalidTokenError:
-        # Mensaje genérico: no exponer algoritmo ni claims parciales al cliente
         raise HTTPException(status_code=401, detail="Token inválido o expirado.")
 
     if payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Se requiere un access token.")
+
+    # Verificar blacklist de tokens revocados (logout)
+    try:
+        from api.routers.auth import _is_token_revoked
+        if _is_token_revoked(payload):
+            raise HTTPException(status_code=401, detail="Token inválido o expirado.")
+    except ImportError:
+        pass
 
     return payload.get("sub")
 
@@ -64,14 +71,31 @@ async def get_api_key(request: Request, api_key: str = Security(api_key_header))
     return api_key
 
 
+def _is_private_ip(ip: str) -> bool:
+    """Devuelve True si la IP es privada, loopback o link-local."""
+    import ipaddress
+    try:
+        addr = ipaddress.ip_address(ip)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except ValueError:
+        return False
+
+
 def _get_real_ip(request: Request) -> str:
-    """Extrae la IP real del cliente considerando proxies (X-Forwarded-For, X-Real-IP)."""
-    xff = request.headers.get("X-Forwarded-For")
+    """
+    Extrae la IP real del cliente.
+    Acepta X-Forwarded-For solo si el primer IP es público (no spoofeable con 127.0.0.1).
+    """
+    xff = request.headers.get("X-Forwarded-For", "")
     if xff:
-        return xff.split(",")[0].strip()
-    x_real = request.headers.get("X-Real-IP")
+        first_ip = xff.split(",")[0].strip().replace("::ffff:", "")
+        if first_ip and not _is_private_ip(first_ip):
+            return first_ip
+    x_real = request.headers.get("X-Real-IP", "")
     if x_real:
-        return x_real.strip()
+        candidate = x_real.strip().replace("::ffff:", "")
+        if candidate and not _is_private_ip(candidate):
+            return candidate
     ip = request.client.host if request.client else "unknown"
     return ip.replace("::ffff:", "")
 

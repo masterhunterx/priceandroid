@@ -133,6 +133,19 @@ def heal_absurd_prices(db) -> int:
     return count
 
 
+def heal_stale_price_history(db) -> int:
+    """Elimina registros de precios con más de 90 días para controlar el tamaño de la tabla."""
+    from sqlalchemy import text
+    cutoff = datetime.now(UTC) - timedelta(days=90)
+    result = db.execute(text("""
+        DELETE FROM prices
+        WHERE scraped_at < :cutoff
+    """), {"cutoff": cutoff})
+    count = result.rowcount
+    db.commit()
+    return count
+
+
 # ---------------------------------------------------------------------------
 # Loop principal
 # ---------------------------------------------------------------------------
@@ -148,6 +161,7 @@ def run_self_healer() -> dict:
         ("orphan_prices",        heal_orphan_prices),
         ("missing_last_sync",    heal_missing_last_sync),
         ("absurd_prices",        heal_absurd_prices),
+        ("stale_price_history",  heal_stale_price_history),
     ]
 
     try:

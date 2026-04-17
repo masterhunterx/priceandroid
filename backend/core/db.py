@@ -46,11 +46,20 @@ def get_engine():
         is_sqlite = "sqlite" in DATABASE_URL
         connect_args = {"check_same_thread": False} if is_sqlite else {}
         
+        pg_kwargs = {}
+        if not is_sqlite:
+            pg_kwargs = {
+                "pool_size":     int(os.getenv("DB_POOL_SIZE", "10")),
+                "max_overflow":  int(os.getenv("DB_MAX_OVERFLOW", "20")),
+                "pool_timeout":  30,
+                "pool_pre_ping": True,  # descarta conexiones muertas antes de usarlas
+            }
+
         _engine = create_engine(
             DATABASE_URL,
             echo=False,
             connect_args=connect_args,
-            # SQLite: pool_size not supported; use StaticPool for single-file
+            **pg_kwargs,
         )
         
         # Enable WAL mode for SQLite — allows concurrent reads + writes
@@ -127,15 +136,20 @@ def _apply_migrations(engine):
     SQLAlchemy create_all no agrega columnas a tablas ya existentes, así que
     hacemos un ALTER TABLE manual idempotente.
     """
+    # (table, column, type, default_value_sql)
     migrations = [
-        ("user_assistant_state", "chat_history_json", "TEXT"),
+        ("user_assistant_state", "chat_history_json", "TEXT",         None),
+        ("user_preferences",     "user_id",           "VARCHAR(100)", "'default_user'"),
+        ("notifications",        "user_id",           "VARCHAR(100)", "'default_user'"),
+        ("pantry_items",         "user_id",           "VARCHAR(100)", "'default_user'"),
     ]
     with engine.connect() as conn:
-        for table, column, col_type in migrations:
+        for table, column, col_type, default in migrations:
             try:
+                default_clause = f" DEFAULT {default}" if default else ""
                 conn.execute(
                     __import__("sqlalchemy").text(
-                        f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
+                        f"ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}"
                     )
                 )
                 conn.commit()

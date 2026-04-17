@@ -153,8 +153,8 @@ def run_stock_scan(batch_size: int = 50) -> None:
         with _stock_scan_lock:
             _stock_scan_state["running"]    = False
             _stock_scan_state["last_run"]   = datetime.now(UTC).isoformat()
-            _stock_scan_state["updated"]    = updated
-            _stock_scan_state["marked_oos"] = marked_oos
+            _stock_scan_state["updated"]    = updated      # escritura bajo lock
+            _stock_scan_state["marked_oos"] = marked_oos  # escritura bajo lock
         logger.info(f"[StockScan] Completado. {updated} actualizados, {marked_oos} marcados sin stock.")
 
 

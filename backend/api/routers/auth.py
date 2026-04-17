@@ -10,7 +10,7 @@ Router de Autenticación JWT — Multi-usuario con aprobación admin vía Discor
 import os
 import sys
 import time
-import json
+import uuid
 import logging
 import threading
 from collections import defaultdict
@@ -23,6 +23,17 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel
 from ..schemas import UnifiedResponse
+
+def _check_password(plain: str, stored: str) -> bool:
+    """Compara contraseña. Si stored empieza con $2b/$2a/$2y usa bcrypt, si no texto plano."""
+    if stored.startswith(("$2b$", "$2a$", "$2y$")):
+        try:
+            import bcrypt
+            return bcrypt.checkpw(plain.encode(), stored.encode())
+        except Exception:
+            return False
+    import hmac
+    return hmac.compare_digest(plain, stored)
 
 logger = logging.getLogger("AntigravityAPI")
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -91,9 +102,26 @@ if not ADMIN_APPROVE_KEY:
     logger.warning("[AUTH] ADMIN_APPROVE_KEY no configurada — el endpoint /approve estará deshabilitado.")
 
 # ── Estado en memoria ──────────────────────────────────────────────────────────
-# {username: {"approved": bool, "requested_at": float, "ip": str}}
+# {username: {"approved": bool, "requested_at": float, "ip": str, "token": str}}
 _pending_approvals: dict = {}
 _approvals_lock = Lock()
+
+# JWT revocation — set de (sub, iat) revocados en logout.
+# No persiste entre reinicios (tokens expiran solos en 8h, riesgo aceptable).
+_revoked_tokens: set = set()
+_revoked_lock = Lock()
+
+def _revoke_token(payload: dict) -> None:
+    sub = payload.get("sub", "")
+    iat = payload.get("iat", 0)
+    with _revoked_lock:
+        _revoked_tokens.add((sub, iat))
+
+def _is_token_revoked(payload: dict) -> bool:
+    sub = payload.get("sub", "")
+    iat = payload.get("iat", 0)
+    with _revoked_lock:
+        return (sub, iat) in _revoked_tokens
 
 # Usuarios aprobados al menos una vez — no requieren re-aprobación hasta restart
 _approved_users: set = set()
@@ -238,7 +266,8 @@ def login(body: LoginRequest, request: Request):
         raise HTTPException(status_code=403, detail="Acceso denegado. Usuario no autorizado.")
 
     # 2. Credenciales
-    if ALLOWED_USERS.get(username) != body.password:
+    stored_pw = ALLOWED_USERS.get(username, "")
+    if not _check_password(body.password, stored_pw):
         logger.warning(f"[AUTH] Contraseña incorrecta para: {username}")
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
 
@@ -259,12 +288,14 @@ def login(body: LoginRequest, request: Request):
         approval = _pending_approvals.get(username)
 
         if approval is None:
-            # Primera solicitud: notificar al admin
-            approve_url = f"{BACKEND_URL}/api/auth/approve/{username}?token={ADMIN_APPROVE_KEY}"
+            # Token único por solicitud — no expone el ADMIN_APPROVE_KEY permanente
+            one_time_token = str(uuid.uuid4())
+            approve_url = f"{BACKEND_URL}/api/auth/approve/{username}?token={one_time_token}"
             _pending_approvals[username] = {
                 "approved": False,
                 "requested_at": time.time(),
                 "ip": client_ip,
+                "token": one_time_token,
             }
             _send_discord(
                 f"🔐 **Solicitud de acceso — FreshCart**\n"
@@ -295,15 +326,20 @@ def login(body: LoginRequest, request: Request):
 
 @router.get("/approve/{username}")
 def approve_user(username: str, token: str = ""):
-    """Admin aprueba un usuario pendiente. Se accede vía el enlace enviado a Discord."""
-    if not ADMIN_APPROVE_KEY or token != ADMIN_APPROVE_KEY:
-        raise HTTPException(status_code=403, detail="Token de aprobación inválido.")
-
+    """Admin aprueba un usuario pendiente. Usa token único por solicitud (enviado a Discord)."""
     username = username.strip().lower()
     with _approvals_lock:
-        if username not in _pending_approvals:
-            return {"message": f"No hay solicitud pendiente para '{username}'."}
+        pending = _pending_approvals.get(username)
+        if not pending:
+            raise HTTPException(status_code=404, detail=f"No hay solicitud pendiente para '{username}'.")
+        # Acepta el token único de la solicitud O el ADMIN_APPROVE_KEY como fallback de emergencia
+        one_time = pending.get("token", "")
+        is_valid = (one_time and token == one_time) or (ADMIN_APPROVE_KEY and token == ADMIN_APPROVE_KEY)
+        if not is_valid:
+            raise HTTPException(status_code=403, detail="Token de aprobación inválido.")
         _pending_approvals[username]["approved"] = True
+        # Invalidar el token único tras usarlo
+        _pending_approvals[username]["token"] = ""
 
     logger.info(f"[AUTH] Admin aprobó a: {username}")
     _send_discord(f"✅ Acceso **aprobado** para `{username}`. Ya puede iniciar sesión.")
@@ -328,6 +364,7 @@ def logout_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_schem
             payload = _decode_token(credentials.credentials)
             username = payload.get("sub")
             _end_session(username)
+            _revoke_token(payload)  # invalida el token en servidor
             logger.info(f"[AUTH] Logout: {username}")
         except Exception:
             pass

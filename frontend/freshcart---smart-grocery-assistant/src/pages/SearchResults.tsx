@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   searchProducts,
+  toggleFavorite,
   formatCurrency,
   getSearchSuggestions,
   getTrendingSearches,
@@ -36,6 +37,7 @@ const SearchResults: React.FC = () => {
   const [searchError, setSearchError] = useState(false);
   const [sort, setSort]             = useState('price_asc');
   const [store, setStore]           = useState(storeParam);
+  const [favoritingId, setFavoritingId] = useState<number | string | null>(null);
 
   // Autocomplete
   const [searchQuery, setSearchQuery]       = useState(query);
@@ -66,6 +68,22 @@ const SearchResults: React.FC = () => {
 
   const handleSort = () => {
     setSort(s => (s === 'price_asc' ? 'price_desc' : 'price_asc'));
+  };
+
+  const handleToggleFavorite = async (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    if (favoritingId === product.id) return;
+    setFavoritingId(product.id);
+    try {
+      const res = await toggleFavorite(product.id);
+      setResults(prev =>
+        prev.map(p => p.id === product.id ? { ...p, is_favorite: res.is_favorite } : p)
+      );
+    } catch {
+      // silenciar errores de red
+    } finally {
+      setFavoritingId(null);
+    }
   };
 
   // ── Execute search whenever query/sort/store changes ──────────────────────────
@@ -417,10 +435,17 @@ const SearchResults: React.FC = () => {
                     <span className="truncate">Ver precios</span>
                   </button>
                   <button
-                    onClick={e => e.stopPropagation()}
-                    className="flex w-10 items-center justify-center rounded-lg h-10 bg-slate-100 dark:bg-[#28392f] text-slate-900 dark:text-white active:scale-95 transition-all"
+                    onClick={e => handleToggleFavorite(e, product)}
+                    disabled={favoritingId === product.id}
+                    className={`flex w-10 items-center justify-center rounded-lg h-10 active:scale-95 transition-all ${
+                      product.is_favorite
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-500'
+                        : 'bg-slate-100 dark:bg-[#28392f] text-slate-400 dark:text-slate-500'
+                    }`}
                   >
-                    <span className="material-symbols-outlined text-[20px]">favorite</span>
+                    <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: product.is_favorite ? "'FILL' 1" : "'FILL' 0" }}>
+                      favorite
+                    </span>
                   </button>
                 </div>
               </div>

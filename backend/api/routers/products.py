@@ -11,18 +11,19 @@ import unicodedata
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Header, BackgroundTasks, Depends
 from core.db import get_session
-from core.models import Product, StoreProduct, Price, Store, ProductMatch
+from core.models import Product, StoreProduct, Price, Store, ProductMatch, UserPreference
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from ..schemas import UnifiedResponse, SearchResponse, ProductOut, ProductDetailOut, PricePointOut, PriceHistoryOut
 from ..utils import (
-    build_price_points, 
-    get_price_insight, 
-    check_favorite, 
-    trigger_jit_sync, 
-    trigger_jit_sync_standalone, 
+    build_price_points,
+    preload_latest_prices,
+    get_price_insight,
+    check_favorite,
+    trigger_jit_sync,
+    trigger_jit_sync_standalone,
     best_price_info,
-    analyze_promo
+    analyze_promo,
 )
 from ..middleware import get_api_key
 
@@ -120,18 +121,51 @@ def search_products(
         else:
             store_prods_sample = main_query.order_by(StoreProduct.id.asc()).limit(page_size).offset(offset).all()
 
+        # ── Precarga bulk: precios y favoritos — elimina N+1 queries ────────────
+        canonical_products = {
+            sp.product_id: sp.product
+            for sp in store_prods_sample
+            if sp.product_id and sp.product
+        }
+        # Todos los StoreProduct de los productos canónicos encontrados
+        if canonical_products:
+            all_related_sps = (
+                session.query(StoreProduct)
+                .filter(StoreProduct.product_id.in_(canonical_products.keys()))
+                .all()
+            )
+            all_sp_ids = [s.id for s in all_related_sps]
+        else:
+            all_sp_ids = []
+
+        # Una sola query para todos los últimos precios
+        bulk_prices = preload_latest_prices(session, all_sp_ids) if all_sp_ids else {}
+
+        # Una sola query para todos los favoritos
+        fav_product_ids: set = set()
+        if canonical_products:
+            fav_rows = (
+                session.query(UserPreference.product_id)
+                .filter(UserPreference.product_id.in_(canonical_products.keys()))
+                .all()
+            )
+            fav_product_ids = {r[0] for r in fav_rows}
+
         results = []
         seen_canonical_ids = set()
-        
+
         for sp in store_prods_sample:
             if sp.product_id:
-                if sp.product_id in seen_canonical_ids: continue
-                # Usar la relación precargada por joinedload — evita query extra por cada item
-                p = sp.product
+                if sp.product_id in seen_canonical_ids:
+                    continue
+                p = canonical_products.get(sp.product_id)
                 if p:
                     seen_canonical_ids.add(p.id)
-                    price_points = build_price_points(session, p.id, branch_context=branch_map)
-                    # Respect the store filter: only show prices from the requested store
+                    price_points = build_price_points(
+                        session, p.id,
+                        branch_context=branch_map,
+                        preloaded_prices=bulk_prices,
+                    )
                     if store:
                         price_points = [pp for pp in price_points if pp.store_slug == store]
                     if price_points:
@@ -149,7 +183,7 @@ def search_products(
                             best_store=b_store,
                             best_store_slug=b_store_slug,
                             price_insight=get_price_insight(session, p.id),
-                            is_favorite=check_favorite(session, p.id),
+                            is_favorite=p.id in fav_product_ids,
                         ))
                         continue
 
@@ -326,8 +360,8 @@ def get_product(
                 is_favorite=False,
             ))
 
-    # Lógica para productos canónicos
-    trigger_jit_sync(product_id, branch_context=branch_map, block=True)
+    # JIT sync en background — no bloquea el request; el usuario ve datos del último ciclo
+    background_tasks.add_task(trigger_jit_sync, product_id, branch_context=branch_map)
     
     with get_session() as session:
         product = session.get(Product, product_id)

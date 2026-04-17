@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from core.db import get_session
 from core.models import StoreProduct, Branch, Price, PriceInsight, UserPreference, Store
+from sqlalchemy import func
 from .schemas import PricePointOut, PriceInsightOut
 
 # Constante para manejo de zona horaria UTC
@@ -77,12 +78,49 @@ def analyze_promo(promo_description: str) -> Dict[str, Any]:
     return res
 
 
-def build_price_points(db_session, product_id: int, branch_context: Optional[Dict[str, str]] = None) -> List[PricePointOut]:
+_LOCAL_LOGOS: Dict[str, str] = {
+    "jumbo": "/logos/jumbo.png",
+    "lider": "/logos/lider.png",
+    "santa_isabel": "/logos/santa_isabel.png",
+    "unimarc": "/logos/unimarc.png",
+}
+
+
+def preload_latest_prices(db_session, sp_ids: List[int]) -> Dict[int, Any]:
+    """
+    Carga el último precio chain-wide (branch_id IS NULL) de cada store_product en UNA sola query.
+    Devuelve dict {store_product_id: Price}.
+    """
+    if not sp_ids:
+        return {}
+    subq = (
+        db_session.query(
+            Price.store_product_id,
+            func.max(Price.scraped_at).label("max_at"),
+        )
+        .filter(Price.store_product_id.in_(sp_ids), Price.branch_id == None)
+        .group_by(Price.store_product_id)
+        .subquery()
+    )
+    rows = (
+        db_session.query(Price)
+        .join(subq, (Price.store_product_id == subq.c.store_product_id) &
+                    (Price.scraped_at == subq.c.max_at))
+        .all()
+    )
+    return {p.store_product_id: p for p in rows}
+
+
+def build_price_points(
+    db_session,
+    product_id: int,
+    branch_context: Optional[Dict[str, str]] = None,
+    preloaded_prices: Optional[Dict[int, Any]] = None,
+) -> List[PricePointOut]:
     """
     Construye la lista de precios actuales para un producto canónico en todas las tiendas.
-    Respeta el contexto de sucursal (X-Branch-Context) si está presente.
+    Si se pasa preloaded_prices (dict sp_id→Price) evita queries adicionales por precio.
     """
-    # Buscamos todas las instancias de este producto en distintas cadenas
     store_products = (
         db_session.query(StoreProduct)
         .filter(StoreProduct.product_id == product_id)
@@ -91,58 +129,45 @@ def build_price_points(db_session, product_id: int, branch_context: Optional[Dic
 
     price_points = []
     seen_stores = set()
-    
+
     for sp in store_products:
-        # Solo mostramos un precio por cada tienda física para no saturar
-        if sp.store_id in seen_stores: continue
+        if sp.store_id in seen_stores:
+            continue
         seen_stores.add(sp.store_id)
-        
+
         store = sp.store
         target_branch_id = None
-        
-        # Resolución de sucursal específica según el contexto del usuario (geolocalización)
+
         if branch_context and store.slug in branch_context:
             ext_id = branch_context[store.slug]
             branch = db_session.query(Branch).filter_by(store_id=store.id, external_store_id=ext_id).first()
             if branch:
                 target_branch_id = branch.id
 
-        # Consulta del último precio registrado
-        latest_query = (
-            db_session.query(Price)
-            .filter(Price.store_product_id == sp.id)
-        )
-        if target_branch_id:
-            latest_query = latest_query.filter(Price.branch_id == target_branch_id)
+        if preloaded_prices is not None and not target_branch_id:
+            # Usar precio precargado — evita query por producto
+            latest = preloaded_prices.get(sp.id)
         else:
-            latest_query = latest_query.filter(Price.branch_id == None)
-            
-        latest = latest_query.order_by(Price.scraped_at.desc()).first()
+            latest_q = db_session.query(Price).filter(Price.store_product_id == sp.id)
+            if target_branch_id:
+                latest_q = latest_q.filter(Price.branch_id == target_branch_id)
+            else:
+                latest_q = latest_q.filter(Price.branch_id == None)
+            latest = latest_q.order_by(Price.scraped_at.desc()).first()
+            if not latest and target_branch_id:
+                latest = (
+                    db_session.query(Price)
+                    .filter_by(store_product_id=sp.id, branch_id=None)
+                    .order_by(Price.scraped_at.desc())
+                    .first()
+                )
 
-        # Fallback a precio nacional (chain-wide) si no hay precio específico para la branch solicitada
-        if not latest and target_branch_id:
-            latest = db_session.query(Price).filter_by(store_product_id=sp.id, branch_id=None).order_by(Price.scraped_at.desc()).first()
-
-        # Fallback de logos — primero los almacenados en la DB, luego assets locales.
-        # Se evita Clearbit (servicio externo sin SLA) que puede bloquearse o caer.
-        _LOCAL_LOGOS: dict = {
-            "jumbo": "/logos/jumbo.png",
-            "lider": "/logos/lider.png",
-            "santa_isabel": "/logos/santa_isabel.png",
-            "unimarc": "/logos/unimarc.png",
-        }
         logo = store.logo_url or _LOCAL_LOGOS.get(store.slug, "")
-
         promo_desc = (latest.promo_description or "") if latest else ""
         p_info = analyze_promo(promo_desc)
-        
         curr_price = latest.price if latest else None
         is_club = p_info["offer_type"] == "card"
-
-        # If a recent positive price exists, consider the product in stock
-        # This overrides stale in_stock=False from 24h crawl cycles
         price_based_in_stock = bool(latest and latest.price and latest.price > 0)
-        effective_in_stock = sp.in_stock or price_based_in_stock
 
         price_points.append(PricePointOut(
             store_id=store.id,
@@ -154,7 +179,7 @@ def build_price_points(db_session, product_id: int, branch_context: Optional[Dic
             promo_price=latest.promo_price if latest else None,
             promo_description=promo_desc,
             has_discount=latest.has_discount if latest else False,
-            in_stock=effective_in_stock,
+            in_stock=sp.in_stock or price_based_in_stock,
             product_url=sp.product_url or "",
             last_sync=sp.last_sync.isoformat() if sp.last_sync else "",
             is_card_price=p_info["is_card"],
