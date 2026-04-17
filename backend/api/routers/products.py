@@ -47,7 +47,8 @@ def search_products(
     sort: str = Query("price_asc", description="Ordenar: price_asc, price_desc, name"),
     page: int = Query(1, ge=1, description="Página"),
     page_size: int = Query(20, ge=1, le=100, description="Resultados por página"),
-    x_branch_context: Optional[str] = Header(None, alias="X-Branch-Context")
+    x_branch_context: Optional[str] = Header(None, alias="X-Branch-Context"),
+    current_user: str = Depends(get_api_key),
 ):
     """
     Motor de Búsqueda KAIROS: Busca productos en todas las tiendas,
@@ -57,6 +58,14 @@ def search_products(
     q = q.strip()
     if len(q) > 100:
         raise HTTPException(status_code=400, detail="El término de búsqueda es demasiado largo.")
+
+    # Tracking de búsquedas por usuario (solo JWT users, no API keys largas)
+    if q and current_user and len(current_user) <= 30:
+        try:
+            from core.metrics import user_searches_total
+            user_searches_total.labels(username=current_user).inc()
+        except Exception:
+            pass
 
     branch_map = None
     if x_branch_context:

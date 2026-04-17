@@ -71,7 +71,30 @@ feedback_total = Gauge(
 api_blocked_requests_total = Counter(
     "freshcart_api_blocked_requests_total",
     "Requests bloqueadas por el WAF o rate limiter",
-    ["reason"]            # reason: waf | rate_limit | blocked_ip
+    ["reason"]            # reason: waf | rate_limit | blocked_ip | unknown_user
+)
+
+# ── Usuarios y sesiones ────────────────────────────────────────────────────────
+users_active_total = Gauge(
+    "freshcart_users_active_total",
+    "Usuarios con sesión activa en este momento"
+)
+user_logins_total = Counter(
+    "freshcart_user_logins_total",
+    "Total de logins exitosos por usuario",
+    ["username"]
+)
+user_session_duration_seconds = Histogram(
+    "freshcart_user_session_duration_seconds",
+    "Duración de cada sesión de usuario en segundos",
+    buckets=[60, 300, 600, 1800, 3600, 7200, 14400, 28800]
+)
+
+# ── Comportamiento de búsqueda ─────────────────────────────────────────────────
+user_searches_total = Counter(
+    "freshcart_user_searches_total",
+    "Total de búsquedas realizadas por usuario",
+    ["username"]
 )
 
 

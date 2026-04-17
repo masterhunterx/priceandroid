@@ -8,7 +8,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<'ok' | 'pending'>;
   logout: () => void;
 }
 
@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []); // solo al montar
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string): Promise<'ok' | 'pending'> => {
     const resp = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -80,6 +80,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     const json = await resp.json();
+
+    if (resp.status === 202 && json.status === 'pending_approval') {
+      return 'pending';
+    }
 
     if (!resp.ok || !json.success) {
       throw new Error(json.detail || json.error || 'Credenciales incorrectas');
@@ -89,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(ACCESS_KEY, access_token);
     localStorage.setItem(REFRESH_KEY, refresh_token);
     setToken(access_token);
+    return 'ok';
   }, []);
 
   const logout = useCallback(() => {
