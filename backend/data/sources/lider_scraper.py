@@ -157,6 +157,7 @@ SINGLE_PRODUCT_QUERY = """query Product($id: String!, $prg: Prg!) {
 # ---------------------------------------------------------------------------
 
 import random as _random
+import re as _re
 
 # Fingerprints rotativos — PerimeterX detecta versiones fijas con el tiempo
 _FINGERPRINTS = ["chrome136", "chrome133a", "chrome131", "chrome124", "chrome120", "chrome116"]
@@ -165,8 +166,7 @@ def create_session():
     """Crea sesión curl_cffi con fingerprint Chrome aleatorio para evadir PerimeterX."""
     fp = _random.choice(_FINGERPRINTS)
     session = cffi_requests.Session(impersonate=fp)
-    # Variar ligeramente el User-Agent según el fingerprint elegido
-    version = fp.replace("chrome", "")
+    version = _re.sub(r"[^0-9]", "", fp.replace("chrome", ""))  # "133a" → "133"
     headers = dict(HEADERS)
     headers["User-Agent"] = (
         f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -179,6 +179,15 @@ def create_session():
     return session
 
 
+def _warm_session(session):
+    """GET homepage para obtener cookies PX antes de llamar a la API GraphQL."""
+    try:
+        session.get("https://www.lider.cl/supermercado", timeout=10)
+        time.sleep(_random.uniform(1.5, 3.0))
+    except Exception:
+        pass
+
+
 def fetch_single_product(session, product_id, store_id=None):
     """
     Fetch a specific product by its ID from the Lider GraphQL API.
@@ -187,7 +196,7 @@ def fetch_single_product(session, product_id, store_id=None):
     """
     variables = {
         "id": str(product_id),
-        "prg": "mWeb",
+        "prg": "rweb",
     }
     payload = {"query": SINGLE_PRODUCT_QUERY, "variables": variables}
 
@@ -197,14 +206,17 @@ def fetch_single_product(session, product_id, store_id=None):
 
     for attempt in range(3):
         try:
+            if attempt == 0:
+                _warm_session(session)
+
             response = session.post(GRAPHQL_ENDPOINT, json=payload, headers=request_headers, timeout=15)
 
             if response.status_code in (400, 403, 412, 429):
                 print(f"  [ERROR] Lider HTTP {response.status_code} para producto {product_id} (intento {attempt+1})")
                 if attempt < 2:
-                    # Nueva sesión con fingerprint diferente + backoff exponencial
                     session = create_session()
-                    time.sleep(2 ** attempt + _random.uniform(0.5, 1.5))
+                    _warm_session(session)
+                    time.sleep(3 + _random.uniform(2, 5))
                     continue
                 raise ConnectionError(f"Lider HTTP {response.status_code}: scraping bloqueado")
 
@@ -248,7 +260,7 @@ def fetch_products_page(session, query, page, store_id=None):
     variables = {
         "query": query,
         "page": page,
-        "prg": "mWeb",
+        "prg": "rweb",
         "sort": "best_match",
         "ps": PAGE_SIZE,
         "limit": PAGE_SIZE,
@@ -260,38 +272,46 @@ def fetch_products_page(session, query, page, store_id=None):
 
     payload = {"query": SEARCH_QUERY, "variables": variables}
 
-    # Lider uses x-o-store header to scope results to a specific branch
     request_headers = {}
     if store_id:
         request_headers["x-o-store"] = str(store_id)
 
-    try:
-        response = session.post(
-            GRAPHQL_ENDPOINT, json=payload, headers=request_headers, timeout=15
-        )
-        response.raise_for_status()
+    for attempt in range(2):
+        try:
+            response = session.post(
+                GRAPHQL_ENDPOINT, json=payload, headers=request_headers, timeout=15
+            )
 
-        data = response.json()
+            if response.status_code in (412, 429, 403):
+                print(f"  [ERROR] Lider HTTP {response.status_code} en búsqueda (intento {attempt+1})")
+                if attempt == 0:
+                    session = create_session()
+                    _warm_session(session)
+                    time.sleep(3 + _random.uniform(2, 4))
+                    continue
+                return [], None
 
-        if "errors" in data:
-            print(f"  [ERROR] GraphQL errors: {data['errors'][0]['message']}")
+            response.raise_for_status()
+            data = response.json()
+
+            if "errors" in data:
+                print(f"  [ERROR] GraphQL errors: {data['errors'][0]['message']}")
+                return [], None
+
+            search_result = data.get("data", {}).get("search", {}).get("searchResult", {})
+            total_results = search_result.get("aggregatedCount", 0)
+
+            products = []
+            for stack in search_result.get("itemStacks", []):
+                for item in stack.get("itemsV2", []):
+                    if item.get("name"):
+                        products.append(item)
+
+            return products, total_results
+
+        except Exception as e:
+            print(f"  [ERROR] API request failed: {e}")
             return [], None
-
-        search_result = data.get("data", {}).get("search", {}).get("searchResult", {})
-        total_results = search_result.get("aggregatedCount", 0)
-
-        # Extract products from all item stacks
-        products = []
-        for stack in search_result.get("itemStacks", []):
-            for item in stack.get("itemsV2", []):
-                if item.get("name"):  # Filter out non-product entries
-                    products.append(item)
-
-        return products, total_results
-
-    except Exception as e:
-        print(f"  [ERROR] API request failed: {e}")
-        return [], None
 
 
 # ---------------------------------------------------------------------------
