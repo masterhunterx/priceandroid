@@ -143,6 +143,8 @@ def _apply_migrations(engine):
         ("user_preferences",     "user_id",           "VARCHAR(100)", "'default_user'"),
         ("notifications",        "user_id",           "VARCHAR(100)", "'default_user'"),
         ("pantry_items",         "user_id",           "VARCHAR(100)", "'default_user'"),
+        ("branches",             "latitude",          "FLOAT",        None),
+        ("branches",             "longitude",         "FLOAT",        None),
     ]
     with engine.connect() as conn:
         for table, column, col_type, default in migrations:
