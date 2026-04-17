@@ -38,7 +38,8 @@ async def on_ready():
 def _is_authorized(author) -> bool:
     """Verifica si el autor del mensaje está en la lista de usuarios autorizados."""
     if not AUTHORIZED_USER_IDS:
-        return True  # Sin lista configurada: permitir todos (modo dev)
+        logger.warning("[KAIROS BOT] AUTHORIZED_USER_IDS no configurado — todos los comandos bloqueados.")
+        return False  # Fail-secure: sin lista configurada, nadie accede
     return author.id in AUTHORIZED_USER_IDS
 
 
@@ -152,27 +153,8 @@ async def on_message(message):
             await message.channel.send(f"Error: {e}")
         return
 
-    # ── !passwords ─────────────────────────────────────────────────────────────
-    if cmd == "!passwords":
-        if not _is_authorized(message.author):
-            await message.channel.send("No tienes permisos para usar este comando.")
-            logger.warning(f"[KAIROS BOT] Intento de !passwords no autorizado de {message.author} (ID: {message.author.id})")
-            return
-        t1 = os.getenv("TEST1_PASSWORD", "no configurada")
-        t2 = os.getenv("TEST2_PASSWORD", "no configurada")
-        t3 = os.getenv("TEST3_PASSWORD", "no configurada")
-        adm = os.getenv("ADMIN_PASSWORD", "no configurada")
-        adm_user = os.getenv("ADMIN_USERNAME", "admin")
-        await message.channel.send(
-            f"**Contrasenas de usuarios FreshCart:**\n"
-            f"```\n"
-            f"{adm_user}  ->  {adm}\n"
-            f"test1  ->  {t1}\n"
-            f"test2  ->  {t2}\n"
-            f"test3  ->  {t3}\n"
-            f"```"
-        )
-        return
+    # !passwords eliminado — exponer contraseñas en Discord es un riesgo de seguridad.
+    # Usar Railway Variables directamente para consultar credenciales.
 
     # ── !stats ─────────────────────────────────────────────────────────────────
     if cmd == "!stats":

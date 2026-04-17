@@ -86,8 +86,8 @@ def start_background_agents():
                     from core.metrics import refresh_catalog_gauges, refresh_feedback_gauges
                     refresh_catalog_gauges()
                     refresh_feedback_gauges()
-                except Exception:
-                    pass
+                except Exception as _me:
+                    logger.debug(f"[Metrics] refresh falló: {_me}")
 
             except Exception as e:
                 logger.error(f"❌ [KAIROS] Error en motor de alertas: {e}", exc_info=True)
