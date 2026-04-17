@@ -388,7 +388,7 @@ export async function submitFeedback(
 ): Promise<{ id: number; message: string }> {
   const resp = await fetchWithAuth(`${API_BASE_URL}/feedback`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify({ type, description, page_context: pageContext }),
   });
   const json = await resp.json();

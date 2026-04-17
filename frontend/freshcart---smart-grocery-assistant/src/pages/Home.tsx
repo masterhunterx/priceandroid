@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications } from '../lib/api';
 import { Deal, Category, Notification, Branch } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface HistoricLow {
   id: number;
@@ -17,11 +18,24 @@ import { useLocation } from '../context/LocationContext';
 import { useTheme } from '../context/ThemeContext';
 import LocationSelector from '../components/LocationSelector';
 
+function getUsername(): string {
+  try {
+    const token = localStorage.getItem('freshcart_access_token');
+    if (!token) return 'Usuario';
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.sub || 'Usuario';
+  } catch { return 'Usuario'; }
+}
+
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { coords, selectedBranches } = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { logout } = useAuth();
   const [isLocationOpen, setIsLocationOpen] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const username = getUsername();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [historicLows, setHistoricLows] = useState<HistoricLow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -93,6 +107,17 @@ const Home: React.FC = () => {
     }
   };
 
+  // Cerrar menú al click fuera
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    if (showUserMenu) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showUserMenu]);
+
   const getCategoryIcon = (name: string) => {
     const n = name.toLowerCase();
     if (n.includes('leche') || n.includes('lacteos')) return 'local_drink';
@@ -111,8 +136,28 @@ const Home: React.FC = () => {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md">
         <div className="flex items-center p-4 pb-0 justify-between">
-          <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-primary/30 bg-primary/10 text-primary">
-            <span className="material-symbols-outlined text-[24px]">person</span>
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setShowUserMenu(v => !v)}
+              className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-primary/30 bg-primary/10 text-primary active:scale-90 transition-transform"
+            >
+              <span className="material-symbols-outlined text-[24px]">person</span>
+            </button>
+            {showUserMenu && (
+              <div className="absolute left-0 top-12 z-50 min-w-[160px] rounded-2xl bg-white dark:bg-slate-800 shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                  <p className="text-xs text-slate-400 dark:text-slate-500">Sesión iniciada como</p>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{username}</p>
+                </div>
+                <button
+                  onClick={() => { setShowUserMenu(false); logout(); navigate('/login'); }}
+                  className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">logout</span>
+                  Cerrar sesión
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex-1 px-3">
              <div className="flex items-center gap-1">
