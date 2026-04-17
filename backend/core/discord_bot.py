@@ -210,6 +210,7 @@ async def on_message(message):
             await message.channel.send("No tienes permisos para usar este comando.")
             return
         import requests as _req
+        import zipfile, io, hashlib
         NETLIFY_TOKEN   = os.getenv("NETLIFY_TOKEN", "")
         NETLIFY_SITE_ID = os.getenv("NETLIFY_SITE_ID", "")
         if not NETLIFY_TOKEN or not NETLIFY_SITE_ID:
@@ -219,39 +220,89 @@ async def on_message(message):
         parts = content.split()
         action = parts[1].lower() if len(parts) > 1 else "status"
 
-        netlify_headers["Content-Type"] = "application/json"
+        MAINTENANCE_HTML = b"""<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FreshCart - Mantenimiento</title>
+<style>body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
+h1{font-size:2rem;margin-bottom:.5rem}p{color:#94a3b8}</style></head>
+<body><div><h1>&#x1F6E0; En mantenimiento</h1><p>FreshCart estara de vuelta pronto.</p></div></body></html>"""
+
         try:
             if action == "off":
-                r = _req.put(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, json={"disabled": True})
-                if r.status_code == 200:
-                    await message.channel.send("Frontend **desactivado**. El sitio ya no es accesible publicamente.")
-                    logger.info("[KAIROS BOT] Frontend Netlify desactivado.")
+                # Guardar deploy actual para poder restaurarlo luego
+                r_site = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
+                current_deploy_id = r_site.json().get("deploy_id", "")
+
+                # Crear zip en memoria con la página de mantenimiento
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    zf.writestr("index.html", MAINTENANCE_HTML)
+                buf.seek(0)
+
+                # Deployar el zip de mantenimiento
+                r = _req.post(
+                    f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys",
+                    headers={**netlify_headers, "Content-Type": "application/zip"},
+                    data=buf.read(),
+                    timeout=30,
+                )
+                if r.status_code in (200, 201):
+                    deploy_data = r.json()
+                    new_deploy_id = deploy_data.get("id", "")
+                    await message.channel.send(
+                        f"Frontend **desactivado**. Pagina de mantenimiento activa.\n"
+                        f"`!frontend on` para restaurar (deploy anterior: `{current_deploy_id[:12]}`)"
+                    )
+                    logger.info(f"[KAIROS BOT] Frontend desactivado. Deploy mantenimiento: {new_deploy_id}. Anterior: {current_deploy_id}")
                 else:
                     await message.channel.send(f"Error al desactivar: HTTP {r.status_code} — {r.text[:200]}")
 
             elif action == "on":
-                r = _req.put(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, json={"disabled": False})
+                # Obtener lista de deploys y restaurar el ultimo 'real' (no de mantenimiento)
+                r_deploys = _req.get(
+                    f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys?per_page=10",
+                    headers=netlify_headers, timeout=10
+                )
+                deploys = r_deploys.json()
+                # El deploy actual (mantenimiento) es el primero de la lista — lo saltamos
+                current_deploy_id = r_deploys.json()[0]["id"] if deploys else ""
+                r_site2 = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
+                current_deploy_id = r_site2.json().get("deploy_id", "")
+                restore_id = None
+                for dep in deploys:
+                    if dep.get("state") == "ready" and dep.get("id") and dep["id"] != current_deploy_id:
+                        restore_id = dep["id"]
+                        break
+
+                if not restore_id:
+                    await message.channel.send("No se encontro un deploy anterior para restaurar.")
+                    return
+
+                r = _req.post(
+                    f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys/{restore_id}/restore",
+                    headers={**netlify_headers, "Content-Type": "application/json"},
+                    timeout=15,
+                )
                 if r.status_code == 200:
-                    await message.channel.send("Frontend **activado**. El sitio volvio a estar disponible.")
-                    logger.info("[KAIROS BOT] Frontend Netlify activado.")
+                    await message.channel.send(f"Frontend **activado**. Deploy `{restore_id[:12]}` restaurado.")
+                    logger.info(f"[KAIROS BOT] Frontend restaurado al deploy {restore_id}")
                 else:
                     await message.channel.send(f"Error al activar: HTTP {r.status_code} — {r.text[:200]}")
 
             else:  # status
-                r = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers)
+                r = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
                 data = r.json()
-                disabled = data.get("disabled", False)
-                url      = data.get("url", "N/A")
-                state    = data.get("state", "N/A")
-                icon     = "🔴 DESACTIVADO" if disabled else "🟢 ACTIVO"
+                url   = data.get("ssl_url") or data.get("url", "N/A")
+                state = data.get("state", "N/A")
+                deploy_id = data.get("deploy_id", "")[:12]
                 await message.channel.send(
                     f"**Estado del Frontend:**\n"
                     f"```\n"
-                    f"Estado : {icon}\n"
-                    f"URL    : {url}\n"
-                    f"State  : {state}\n"
+                    f"URL      : {url}\n"
+                    f"State    : {state}\n"
+                    f"Deploy   : {deploy_id}\n"
                     f"```\n"
-                    f"Usa `!frontend off` para desactivar o `!frontend on` para activar."
+                    f"Usa `!frontend off` para modo mantenimiento o `!frontend on` para restaurar."
                 )
         except Exception as e:
             await message.channel.send(f"Error al contactar Netlify: {e}")
