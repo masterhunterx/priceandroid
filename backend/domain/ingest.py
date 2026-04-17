@@ -21,9 +21,18 @@ import argparse
 import hashlib
 import sys
 import time
+import threading
 from datetime import datetime, timezone
 import asyncio
 UTC = timezone.utc
+
+# Rate limiter JIT por tienda: evita saturar anti-bots (PerimeterX, Akamai)
+_jit_rate_lock = threading.Lock()
+_jit_last_request: dict[str, float] = {}
+_JIT_MIN_INTERVAL: dict[str, float] = {
+    "lider": 15.0,   # PerimeterX detecta >1 req/15s como bot
+    "default": 2.0,
+}
 
 from core.db import get_session, init_db
 from .matcher import (
@@ -120,6 +129,16 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
             return False
     except Exception:
         pass
+
+    # Rate limiter: espaciar requests por tienda para no activar anti-bots
+    min_interval = _JIT_MIN_INTERVAL.get(store.slug, _JIT_MIN_INTERVAL["default"])
+    with _jit_rate_lock:
+        last = _jit_last_request.get(store.slug, 0.0)
+        elapsed = time.time() - last
+        if elapsed < min_interval:
+            logger.debug(f"[JIT] Rate limit {store.slug} — esperando {min_interval - elapsed:.1f}s")
+            return False
+        _jit_last_request[store.slug] = time.time()
 
     result = None
     try:

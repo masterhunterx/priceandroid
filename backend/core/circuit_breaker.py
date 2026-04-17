@@ -14,8 +14,8 @@ import logging
 
 logger = logging.getLogger("AntigravityAPI")
 
-FAILURE_THRESHOLD = int(10)   # errores consecutivos para abrir el circuito
-RECOVERY_TIMEOUT  = 7200      # segundos bloqueado antes de probar recuperación (2h)
+FAILURE_THRESHOLD = 3         # errores consecutivos para abrir el circuito
+RECOVERY_TIMEOUT  = 21600     # segundos bloqueado antes de probar recuperación (6h)
 
 _CLOSED    = "closed"
 _OPEN      = "open"
