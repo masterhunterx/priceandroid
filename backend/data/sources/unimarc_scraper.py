@@ -144,19 +144,30 @@ def fetch_products_page(session, query, page, cluster_id=None):
         return [], None
 
 
-def fetch_single_product(session, sku_id, cluster_id=None):
+def fetch_single_product(session, sku_id, cluster_id=None, product_name=None):
     """
     Fetch real-time data for a single product by SKU ID from Unimarc.
-    Uses the search endpoint filtered by SKU for precision.
+    Falls back to name search if SKU lookup returns no match.
     """
     print(f"  [Unimarc] Syncing single SKU: {sku_id}...")
     products, _ = fetch_products_page(session, sku_id, 1, cluster_id=cluster_id)
-    
+
     for p in products:
         item = p.get("item", {})
         if str(item.get("sku")) == str(sku_id):
             return normalize_product(p)
-            
+
+    if product_name:
+        short_name = " ".join(product_name.split()[:4])
+        name_products, _ = fetch_products_page(session, short_name, 1, cluster_id=cluster_id)
+        for p in name_products:
+            item = p.get("item", {})
+            if str(item.get("sku")) == str(sku_id):
+                return normalize_product(p)
+        if name_products:
+            print(f"  [Unimarc] SKU {sku_id} drifted — usando mejor match por nombre '{short_name}'")
+            return normalize_product(name_products[0])
+
     return None
 
 

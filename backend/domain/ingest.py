@@ -141,7 +141,7 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
         elif store.slug == "unimarc":
             from data.sources.unimarc_scraper import create_session, fetch_single_product
             session = create_session()
-            result = fetch_single_product(session, sp.sku_id, cluster_id=ext_branch_id)
+            result = fetch_single_product(session, sp.sku_id, cluster_id=ext_branch_id, product_name=sp.name)
             
         try:
             from core.metrics import sync_operations_total, price_updates_total

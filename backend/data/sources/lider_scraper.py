@@ -289,7 +289,7 @@ def fetch_products_page(session, query, page, store_id=None):
 
         return products, total_results
 
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         print(f"  [ERROR] API request failed: {e}")
         return [], None
 

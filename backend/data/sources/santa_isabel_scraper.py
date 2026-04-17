@@ -171,15 +171,16 @@ def fetch_single_product(session, sku_id, store_id=None, product_name=None):
 
             # Intento 2: si hay nombre disponible, buscar por nombre y verificar SKU
             if product_name:
-                # Usar las primeras 4 palabras para evitar búsquedas demasiado específicas
                 short_name = " ".join(product_name.split()[:4])
                 products_by_name = _try_search(short_name)
                 for p in products_by_name:
                     for item in p.get("items", []):
                         if str(item.get("itemId", "")) == str(sku_id):
                             return normalize_product(p)
-                # Si encontró resultados por nombre pero ningún match exacto de SKU,
-                # no retornamos el primero para evitar datos incorrectos — es not_found real
+                # SKU puede haber cambiado (re-catalogación) — aceptar mejor match por nombre
+                if products_by_name:
+                    print(f"  [SI] SKU {sku_id} drifted — usando mejor match por nombre '{short_name}'")
+                    return normalize_product(products_by_name[0])
             return None
 
         except ConnectionError:
