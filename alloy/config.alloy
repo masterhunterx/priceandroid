@@ -1,0 +1,26 @@
+// Grafana Alloy — scraper de métricas FreshCart
+// Scrapea el backend Railway y empuja a Grafana Cloud Prometheus
+
+prometheus.scrape "freshcart_backend" {
+  targets = [{
+    __address__ = "backend-production-8c5c4.up.railway.app",
+    __scheme__  = "https",
+    __metrics_path__ = "/metrics",
+  }]
+
+  scrape_interval = "60s"
+  scrape_timeout  = "15s"
+
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = env("GRAFANA_INSTANCE_ID")
+      password = env("GRAFANA_API_KEY")
+    }
+  }
+}

@@ -1,0 +1,8 @@
+
+{
+  "name": "FreshCart - Smart Grocery Assistant",
+  "description": "A premium grocery shopping app featuring smart substitutions, price tracking, and store comparisons to help you save more on every trip.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

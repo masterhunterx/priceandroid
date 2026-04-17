@@ -1,0 +1,394 @@
+"""
+Router de Productos KAIROS
+==========================
+Gestión de búsqueda, sugerencias y sincronización en tiempo real de productos.
+Soporta búsqueda resiliente y optimización de consultas SQL (joinedload).
+"""
+
+import json
+import re
+import unicodedata
+from typing import Optional
+from fastapi import APIRouter, Query, HTTPException, Header, BackgroundTasks, Depends
+from core.db import get_session
+from core.models import Product, StoreProduct, Price, Store, ProductMatch
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
+from ..schemas import UnifiedResponse, SearchResponse, ProductOut, ProductDetailOut, PricePointOut, PriceHistoryOut
+from ..utils import (
+    build_price_points, 
+    get_price_insight, 
+    check_favorite, 
+    trigger_jit_sync, 
+    trigger_jit_sync_standalone, 
+    best_price_info,
+    analyze_promo
+)
+from ..middleware import get_api_key
+
+router = APIRouter(
+    prefix="/api/products",
+    tags=["Products"],
+    dependencies=[Depends(get_api_key)]
+)
+
+def _strip_accents(text: str) -> str:
+    """Elimina acentos de una cadena de texto para normalización de búsqueda."""
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', text)
+        if unicodedata.category(c) != 'Mn'
+    )
+
+@router.get("/search", response_model=UnifiedResponse)
+def search_products(
+    q: str = Query("", description="Término de búsqueda"),
+    store: Optional[str] = Query(None, description="Filtrar por slug de tienda"),
+    category: Optional[str] = Query(None, description="Filtrar por categoría"),
+    sort: str = Query("price_asc", description="Ordenar: price_asc, price_desc, name"),
+    page: int = Query(1, ge=1, description="Página"),
+    page_size: int = Query(20, ge=1, le=100, description="Resultados por página"),
+    x_branch_context: Optional[str] = Header(None, alias="X-Branch-Context")
+):
+    """
+    Motor de Búsqueda KAIROS: Busca productos en todas las tiendas,
+    aplicando lógica resiliente a errores tipográficos y optimizando las consultas SQL.
+    """
+    # Validación básica de entrada
+    q = q.strip()
+    if len(q) > 100:
+        raise HTTPException(status_code=400, detail="El término de búsqueda es demasiado largo.")
+
+    branch_map = None
+    if x_branch_context:
+        try:
+            branch_map = json.loads(x_branch_context)
+        except json.JSONDecodeError:
+            pass  # Header malformado, se ignora y se procede sin contexto de sucursal
+
+    with get_session() as session:
+        # Optimizamos la consulta con joinedload para evitar N+1 queries
+        main_query = session.query(StoreProduct).options(
+            joinedload(StoreProduct.product),
+            joinedload(StoreProduct.store)
+        )
+        
+        if q:
+            tok_lower = q.strip().lower()
+            tok_stripped = _strip_accents(tok_lower)
+            # Escapar metacaracteres SQL (\ % _) del término del usuario ANTES de añadir wildcards.
+            # Si no se hace esto, un guión bajo ingresado por el usuario actúa como comodín SQL.
+            tok_escaped = tok_stripped.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+            # Resiliencia fonética: sustituir vocales por '_' (un carácter cualquiera) para
+            # tolerar errores tipográficos en vocales (ej. "lech" → "l_ch_").
+            vowel_pattern = re.sub(r'[aáeéiíoóuúü]', '_', tok_escaped)
+            term_resilient = f"%{vowel_pattern}%"
+
+            main_query = main_query.filter(
+                (func.lower(StoreProduct.name).like(term_resilient, escape='\\')) |
+                (func.lower(StoreProduct.brand).like(term_resilient, escape='\\'))
+            )
+        
+        if category:
+            cat_esc = category.lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+            main_query = main_query.filter(
+                (func.lower(StoreProduct.top_category).like(f"%{cat_esc}%", escape='\\')) |
+                (func.lower(StoreProduct.category_path).like(f"%{cat_esc}%", escape='\\'))
+            )
+            
+        if store:
+            main_query = main_query.filter(StoreProduct.store.has(slug=store))
+
+        total = main_query.count()
+        offset = (page - 1) * page_size
+
+        # Para ordenamiento por precio necesitamos una muestra mayor y ordenar en memoria
+        # (los precios viven en Price, no en StoreProduct, así que no se puede ORDER BY en SQL directo)
+        if sort in ("price_asc", "price_desc"):
+            sample_size = page_size * 5
+            store_prods_sample = main_query.limit(sample_size).offset(offset).all()
+        elif sort == "name":
+            store_prods_sample = main_query.order_by(StoreProduct.name.asc()).limit(page_size).offset(offset).all()
+        else:
+            store_prods_sample = main_query.order_by(StoreProduct.id.asc()).limit(page_size).offset(offset).all()
+
+        results = []
+        seen_canonical_ids = set()
+        
+        for sp in store_prods_sample:
+            if sp.product_id:
+                if sp.product_id in seen_canonical_ids: continue
+                # Usar la relación precargada por joinedload — evita query extra por cada item
+                p = sp.product
+                if p:
+                    seen_canonical_ids.add(p.id)
+                    price_points = build_price_points(session, p.id, branch_context=branch_map)
+                    # Respect the store filter: only show prices from the requested store
+                    if store:
+                        price_points = [pp for pp in price_points if pp.store_slug == store]
+                    if price_points:
+                        best_price_val, b_store, b_store_slug = best_price_info(price_points)
+                        results.append(ProductOut(
+                            id=p.id,
+                            name=p.canonical_name,
+                            brand=p.brand or "",
+                            category=p.category or "",
+                            image_url=p.image_url or "",
+                            weight_value=p.weight_value,
+                            weight_unit=p.weight_unit,
+                            prices=price_points,
+                            best_price=best_price_val,
+                            best_store=b_store,
+                            best_store_slug=b_store_slug,
+                            price_insight=get_price_insight(session, p.id),
+                            is_favorite=check_favorite(session, p.id),
+                        ))
+                        continue
+
+            # Fallback para productos no emparejados (unmatched)
+            latest_price_obj = sp.latest_price
+            price_val = latest_price_obj.price if latest_price_obj else 0
+            results.append(ProductOut(
+                id=1000000 + sp.id,
+                name=sp.name,
+                brand=sp.brand or "",
+                category=sp.top_category or "",
+                image_url=sp.image_url or "",
+                prices=[PricePointOut(
+                    store_id=sp.store_id,
+                    store_name=sp.store.name,
+                    store_slug=sp.store.slug,
+                    store_logo=sp.store.logo_url or "",
+                    price=price_val,
+                    in_stock=sp.in_stock,
+                    last_sync=sp.last_sync.isoformat() if sp.last_sync else ""
+                )],
+                best_price=price_val,
+                best_store=sp.store.name,
+                best_store_slug=sp.store.slug,
+                is_favorite=False
+            ))
+
+        # Ordenar resultados en memoria según el parámetro sort
+        if sort == "price_asc":
+            results.sort(key=lambda p: p.best_price if p.best_price is not None else float('inf'))
+        elif sort == "price_desc":
+            results.sort(key=lambda p: p.best_price if p.best_price is not None else 0.0, reverse=True)
+
+        return UnifiedResponse(data=SearchResponse(
+            results=results[:page_size],
+            total=total,
+            page=page,
+            page_size=page_size,
+        ))
+
+@router.get("/suggestions", response_model=UnifiedResponse)
+def get_search_suggestions(q: str = Query("", min_length=1)):
+    """
+    KAIROS Suggestion Engine: Autocompletado rápido con product_id para navegación directa.
+    """
+    if not q or len(q.strip()) < 2:
+        return UnifiedResponse(data=[])
+
+    q_clean = q.strip().lower()
+    q_esc   = q_clean.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+    term    = f"{q_esc}%"
+
+    with get_session() as session:
+        rows = (
+            session.query(
+                StoreProduct.name,
+                StoreProduct.brand,
+                ProductMatch.product_id,
+                Store.name.label("store_name"),
+                Store.slug.label("store_slug"),
+                Store.logo_url.label("store_logo"),
+            )
+            .join(Store)
+            .outerjoin(ProductMatch, ProductMatch.store_product_id == StoreProduct.id)
+            .filter(
+                StoreProduct.in_stock == True,
+                (func.lower(StoreProduct.name).like(term, escape='\\')) |
+                (func.lower(StoreProduct.brand).like(term, escape='\\'))
+            )
+            .limit(20)
+            .all()
+        )
+
+        seen_names  = set()
+        seen_brands = set()
+        results     = []
+
+        for name, brand, product_id, s_name, s_slug, s_logo in rows:
+            clean_name = name.strip()
+            key = clean_name.lower()
+            if key not in seen_names:
+                results.append({
+                    "term":       clean_name,
+                    "type":       "product",
+                    "product_id": product_id,
+                    "store":      s_name,
+                    "store_slug": s_slug,
+                    "store_logo": s_logo,
+                })
+                seen_names.add(key)
+
+            if brand and brand.lower().startswith(q_clean):
+                bkey = brand.strip().lower()
+                if bkey not in seen_brands:
+                    results.append({
+                        "term":       brand.strip(),
+                        "type":       "brand",
+                        "product_id": None,
+                        "store":      None,
+                        "store_slug": None,
+                        "store_logo": None,
+                    })
+                    seen_brands.add(bkey)
+
+        return UnifiedResponse(data=results[:8])
+
+@router.get("/{product_id}", response_model=UnifiedResponse)
+def get_product(
+    product_id: int, 
+    background_tasks: BackgroundTasks,
+    x_branch_context: Optional[str] = Header(None, alias="X-Branch-Context")
+):
+    """
+    Obtener detalle completo de un producto por su ID.
+    Controla tanto productos canónicos como productos específicos de tienda.
+    """
+    branch_map = None
+    if x_branch_context:
+        try:
+            branch_map = json.loads(x_branch_context)
+        except json.JSONDecodeError:
+            pass  # Header malformado, se ignora
+
+    # Lógica para productos específicos de tienda (unmatched)
+    if product_id >= 1000000:
+        sp_id = product_id - 1000000
+        with get_session() as session:
+            sp = session.get(StoreProduct, sp_id)
+            if not sp:
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
+            
+            # Sincronización instantánea si los datos están desactualizados
+            trigger_jit_sync_standalone(sp, branch_context=branch_map)
+            session.refresh(sp)
+            latest = sp.latest_price
+            promo_desc = (latest.promo_description or "") if latest else ""
+            p_info = analyze_promo(promo_desc)
+            curr_price = latest.price if latest else None
+            is_club = p_info["offer_type"] == "card"
+
+            price_points = [PricePointOut(
+                store_id=sp.store_id,
+                store_name=sp.store.name,
+                store_slug=sp.store.slug,
+                store_logo=sp.store.logo_url or "",
+                price=curr_price,
+                list_price=latest.list_price if latest else None,
+                promo_price=latest.promo_price if latest else None,
+                promo_description=promo_desc,
+                has_discount=latest.has_discount if latest else False,
+                last_sync=sp.last_sync.isoformat() if sp.last_sync else "",
+                in_stock=sp.in_stock,
+                product_url=sp.product_url or "",
+                is_card_price=p_info["is_card"],
+                card_label=p_info["label"],
+                offer_type=p_info["offer_type"],
+                club_price=curr_price if is_club else None,
+                unit_price=p_info["unit_price"],
+            )]
+
+            return UnifiedResponse(data=ProductDetailOut(
+                id=product_id,
+                name=sp.name,
+                brand=sp.brand or "",
+                category=sp.top_category or "",
+                category_path=sp.category_path or "",
+                image_url=sp.image_url or "",
+                prices=price_points,
+                best_price=latest.price if latest else None,
+                best_store=sp.store.name,
+                best_store_slug=sp.store.slug,
+                price_history=[], 
+                price_insight=None,
+                is_favorite=False,
+            ))
+
+    # Lógica para productos canónicos
+    trigger_jit_sync(product_id, branch_context=branch_map, block=True)
+    
+    with get_session() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+ 
+        price_points = build_price_points(session, product.id, branch_context=branch_map)
+        best_price_val, b_store, b_store_slug = best_price_info(price_points)
+
+        # Recopilación de historial de precios reciente — joinedload evita N+1
+        price_history = []
+        store_products = (
+            session.query(StoreProduct)
+            .options(joinedload(StoreProduct.prices))
+            .filter(StoreProduct.product_id == product.id)
+            .all()
+        )
+        PRICE_HISTORY_LIMIT = 60  # últimas N entradas por tienda para gráficos precisos
+        for sp in store_products:
+            # Ordenar por fecha desc y tomar los más recientes
+            recent = sorted(sp.prices, key=lambda p: p.scraped_at or 0, reverse=True)[:PRICE_HISTORY_LIMIT]
+            for price_record in recent:
+                price_history.append(PriceHistoryOut(
+                    price=price_record.price,
+                    scraped_at=price_record.scraped_at.isoformat() if price_record.scraped_at else "",
+                ))
+
+        price_history.sort(key=lambda ph: ph.scraped_at)
+
+        return UnifiedResponse(data=ProductDetailOut(
+            id=product.id,
+            name=product.canonical_name,
+            brand=product.brand or "",
+            category=product.category or "",
+            category_path=product.category_path or "",
+            image_url=product.image_url or "",
+            weight_value=product.weight_value,
+            weight_unit=product.weight_unit,
+            prices=price_points,
+            best_price=best_price_val,
+            best_store=b_store,
+            best_store_slug=b_store_slug,
+            price_history=price_history,
+            price_insight=get_price_insight(session, product.id),
+            is_favorite=check_favorite(session, product.id),
+        ))
+
+@router.post("/{product_id}/sync", response_model=UnifiedResponse)
+def sync_product_details(product_id: int):
+    """Fuerza la sincronización en tiempo real de los precios de un producto."""
+    from domain.ingest import sync_single_store_product
+    with get_session() as session:
+        if product_id >= 1000000:
+            sp_target_id = product_id - 1000000
+            store_products = [session.get(StoreProduct, sp_target_id)]
+        else:
+            store_products = session.query(StoreProduct).filter_by(product_id=product_id).all()
+            
+        if not store_products or not any(store_products):
+            raise HTTPException(status_code=404, detail="No se encontraron precios para sincronizar")
+            
+        updated = 0
+        for sp in store_products:
+            if not sp: continue
+            if sync_single_store_product(session, sp.id):
+                updated += 1
+                
+        return UnifiedResponse(data={"updated_count": updated, "status": "verified"})
+
+@router.post("/verify/{product_id}", response_model=UnifiedResponse)
+def verify_price_realtime(product_id: int):
+    """Alias para la sincronización de precios (Verificación de integridad)."""
+    return sync_product_details(product_id)

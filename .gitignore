@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Environment secrets - NEVER commit these
+.env
+backend/.env
+frontend/**/.env
+frontend/**/.env.local
+frontend/**/.env.production
+
+# Database files
+backend/data/*.db
+
+# Node
+node_modules/
+frontend/freshcart---smart-grocery-assistant/node_modules/
+
+# Build output
+frontend/freshcart---smart-grocery-assistant/dist/
+
+# Alembic
+# (keep alembic.ini and migrations/, but ignore local overrides)
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI Agents
+.agents/
+
+# Claude Code local settings (contiene configuración de usuario, no del proyecto)
+.claude/settings.local.json
+
+# Archivos de análisis y reportes generados
+archived/
+analisis/
+*.pdf
+*.code-profile
+
+# Claude Code settings
+.claude/
+
+# Logs en raíz
+*.log
+
+# Data artifacts (CSV, JSON, SQL)
+backend/**/*.csv
+backend/**/*.json
+backend/**/*.sql
+backend/**/*.log
+backend/data/grocery.db*
+
+# Exception: README.md, Project_Architecture_Blueprint.md and other .md files
+!README.md
+!Project_Architecture_Blueprint.md
+!Data_Structures.md
+!Backend_Audit_Report_27_03_2026.md
+!App Supermercado - Ingestion Pipeline.png
+*.md
+*.png   
+
+# temp
+tmp/

@@ -1,0 +1,43 @@
+# Core — versiones pinneadas para reproducibilidad y seguridad
+SQLAlchemy==2.0.48
+rapidfuzz>=3.0
+requests==2.32.5
+
+# Akamai bypass (Unimarc)
+curl_cffi==0.14.0
+
+# REST API
+fastapi==0.135.2
+uvicorn[standard]==0.41.0
+pydantic==2.11.10
+
+# PostgreSQL driver
+psycopg2-binary>=2.9
+
+# Database migrations
+alembic==1.18.4
+
+# Environment variable loading
+python-dotenv==1.1.1
+
+# Testing
+pytest==9.0.2
+
+# Scheduling
+schedule==1.2.2
+
+# JWT Authentication — PyJWT reemplaza python-jose (CVE-2024-33664, CVE-2024-33663)
+PyJWT[crypto]==2.11.0
+passlib[bcrypt]==1.7.4
+
+# AI — Proveedores de inferencia
+openai>=1.0.0            # OpenRouter (API OpenAI-compatible) — modelos gratuitos
+groq>=1.1.0              # Groq LPU: respuesta <1s, tier gratuito (fallback)
+huggingface_hub>=0.26.0  # HuggingFace Inference API (fallback)
+
+# Discord bot
+discord.py>=2.3.0
+
+# Observabilidad — métricas Prometheus para Grafana
+prometheus-client>=0.20.0
+prometheus-fastapi-instrumentator>=6.1.0

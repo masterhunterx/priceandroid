@@ -1,0 +1,281 @@
+"""
+Descubrimiento de Ofertas y Tendencias
+======================================
+Router para la visualización de descuentos activos, productos tendencia y planificación
+extrema de ahorro (Ultraplan).
+"""
+
+from typing import Optional
+from fastapi import APIRouter, Query, Depends
+from core.db import get_session
+from core.models import Product, StoreProduct, Price, Store
+from sqlalchemy import func
+from ..schemas import UnifiedResponse, CategoryOut, DealOut
+from ..middleware import get_api_key
+
+router = APIRouter(
+    prefix="/api",
+    tags=["Deals & Discover"],
+    dependencies=[Depends(get_api_key)]
+)
+
+@router.get("/trending", response_model=UnifiedResponse)
+async def get_trending_searches():
+    """
+    Entrega una lista de las búsquedas más populares del día.
+    Ayuda al usuario a identificar categorías de interés común en tiempo real.
+    """
+    trending = [
+        {"term": "Jack Daniels", "icon": "🥃"},
+        {"term": "Yogurt", "icon": "🔥"},
+        {"term": "Leche", "icon": "🥛"},
+        {"term": "Huevos", "icon": "🥚"},
+        {"term": "Aceite", "icon": "🍳"},
+        {"term": "Arroz", "icon": "🍚"},
+        {"term": "Atún", "icon": "🐟"},
+        {"term": "Cerveza", "icon": "🍺"},
+        {"term": "Detergente", "icon": "🧼"}
+    ]
+    return UnifiedResponse(data=trending)
+
+
+_CATEGORY_MAP = [
+    {
+        "name": "Despensa",
+        "emoji": "🛒",
+        "color": "#f59e0b",
+        "keywords": ["despensa", "arroz", "pasta", "fideos", "legumbre", "aceite", "vinagre", "sal", "azucar", "harina", "conserva", "enlatado", "salsa", "condimento", "cereal", "avena"],
+    },
+    {
+        "name": "Lácteos y Huevos",
+        "emoji": "🥛",
+        "color": "#3b82f6",
+        "keywords": ["lacteo", "lácteo", "leche", "yogur", "queso", "mantequilla", "crema", "huevo", "frescos", "refrigerad"],
+    },
+    {
+        "name": "Frutas y Verduras",
+        "emoji": "🥦",
+        "color": "#22c55e",
+        "keywords": ["fruta", "verdura", "vegetal", "hortaliza", "ensalada"],
+    },
+    {
+        "name": "Carnes y Pescados",
+        "emoji": "🥩",
+        "color": "#ef4444",
+        "keywords": ["carne", "pollo", "cerdo", "vacuno", "pescado", "marisco", "filete", "carnicer", "pescader"],
+    },
+    {
+        "name": "Panadería y Dulces",
+        "emoji": "🍞",
+        "color": "#f97316",
+        "keywords": ["pan", "pasteler", "pastel", "torta", "dulce", "chocolate", "galleta", "snack", "colacion", "desayuno", "mermelada", "miel", "manjar"],
+    },
+    {
+        "name": "Bebidas y Licores",
+        "emoji": "🍷",
+        "color": "#8b5cf6",
+        "keywords": ["bebida", "jugo", "agua", "licor", "vino", "cerveza", "whisky", "ron", "pisco", "refresco", "energetica"],
+    },
+    {
+        "name": "Congelados",
+        "emoji": "🧊",
+        "color": "#06b6d4",
+        "keywords": ["congelado", "helado", "pizza congelada"],
+    },
+    {
+        "name": "Quesos y Fiambres",
+        "emoji": "🧀",
+        "color": "#eab308",
+        "keywords": ["queso", "fiambre", "embutido", "jamon", "salame", "mortadela", "salchicha"],
+    },
+    {
+        "name": "Limpieza del Hogar",
+        "emoji": "🧹",
+        "color": "#14b8a6",
+        "keywords": ["limpieza", "detergente", "cloro", "suavizante", "limpiapisos", "esponja", "basura", "aseo"],
+    },
+    {
+        "name": "Cuidado Personal",
+        "emoji": "🧴",
+        "color": "#ec4899",
+        "keywords": ["personal", "belleza", "perfumer", "higiene", "shampoo", "jabon", "desodorante", "crema", "maquillaje", "boti", "farmacia", "salud"],
+    },
+    {
+        "name": "Bebés y Niños",
+        "emoji": "👶",
+        "color": "#a78bfa",
+        "keywords": ["bebe", "bebé", "niño", "panal", "pañal", "infantil", "juguete", "mundo beb"],
+    },
+    {
+        "name": "Mascotas",
+        "emoji": "🐾",
+        "color": "#84cc16",
+        "keywords": ["mascota", "perro", "gato", "animal"],
+    },
+    {
+        "name": "Comidas Preparadas",
+        "emoji": "🍱",
+        "color": "#f43f5e",
+        "keywords": ["preparad", "plato", "comida lista", "listo para comer"],
+    },
+    {
+        "name": "Hogar y Tecnología",
+        "emoji": "🏠",
+        "color": "#64748b",
+        "keywords": ["hogar", "tecnolog", "electro", "ferreteri", "jardin", "automo"],
+    },
+]
+
+def _normalize_category(raw: str) -> str:
+    """Mapea una categoría raw de tienda a la categoría canónica."""
+    if not raw:
+        return "Otros"
+    lower = raw.lower()
+    for cat in _CATEGORY_MAP:
+        if any(kw in lower for kw in cat["keywords"]):
+            return cat["name"]
+    return "Otros"
+
+
+@router.get("/categories", response_model=UnifiedResponse)
+def list_categories():
+    """
+    Lista categorías normalizadas agrupando las variantes de cada tienda.
+    Devuelve nombre canónico, emoji, color y conteo total de productos.
+    """
+    with get_session() as session:
+        rows = (
+            session.query(StoreProduct.top_category, func.count(StoreProduct.id))
+            .filter(StoreProduct.top_category.isnot(None), StoreProduct.top_category != "")
+            .group_by(StoreProduct.top_category)
+            .all()
+        )
+
+    # Agrupar por categoría normalizada
+    counts: dict[str, int] = {}
+    for raw_cat, count in rows:
+        canonical = _normalize_category(raw_cat)
+        counts[canonical] = counts.get(canonical, 0) + count
+
+    # Construir respuesta ordenada por conteo desc, con metadata visual
+    meta = {c["name"]: c for c in _CATEGORY_MAP}
+    meta["Otros"] = {"name": "Otros", "emoji": "📦", "color": "#94a3b8"}
+
+    result = []
+    for name, count in sorted(counts.items(), key=lambda x: -x[1]):
+        m = meta.get(name, meta["Otros"])
+        result.append({
+            "name": name,
+            "emoji": m["emoji"],
+            "color": m["color"],
+            "product_count": count,
+        })
+
+    return UnifiedResponse(data=result)
+
+
+@router.get("/deals", response_model=UnifiedResponse)
+def list_deals(
+    limit: int = Query(20, ge=1, le=100, description="Máximo de ofertas a retornar"),
+    offset: int = Query(0, ge=0, description="Desplazamiento para paginación"),
+):
+    """
+    Motor de Detección de Ofertas: Encuentra los productos con mayores descuentos activos
+    en relación a su precio de lista histórico. Prioriza las ofertas recolectadas recientemente.
+    Soporta paginación mediante el parámetro offset.
+    """
+    with get_session() as session:
+        discounted = (
+            session.query(StoreProduct, Price, Store)
+            .join(Price, Price.store_product_id == StoreProduct.id)
+            .join(Store, Store.id == StoreProduct.store_id)
+            .filter(Price.has_discount == True)
+            .filter(StoreProduct.in_stock == True)
+            .order_by(Price.scraped_at.desc())
+            .limit((limit + offset) * 3)
+            .all()
+        )
+
+        seen_products = set()
+        all_deals = []
+
+        for sp, price, store in discounted:
+            if sp.id in seen_products: continue
+            seen_products.add(sp.id)
+
+            discount_pct = None
+            if price.list_price and price.price and price.list_price > 0:
+                discount_pct = round((1 - price.price / price.list_price) * 100, 1)
+
+            deal_score = 0
+            if discount_pct:
+                deal_score = min(100, int(discount_pct * 1.5))
+
+            all_deals.append(DealOut(
+                product_id=sp.product_id if sp.product_id else (1000000 + sp.id),
+                product_name=sp.name,
+                brand=sp.brand or "",
+                category=sp.top_category or "",
+                image_url=sp.image_url or "",
+                store_name=store.name,
+                store_slug=store.slug,
+                store_logo=store.logo_url or "",
+                price=price.price,
+                current_price=price.price,
+                list_price=price.list_price,
+                promo_price=price.promo_price,
+                promo_description=price.promo_description or "",
+                discount_percent=discount_pct,
+                deal_score=deal_score,
+                product_url=sp.product_url or "",
+            ))
+
+        all_deals.sort(key=lambda d: d.discount_percent if d.discount_percent else 0, reverse=True)
+        return UnifiedResponse(data=all_deals[offset: offset + limit])
+
+
+@router.get("/deals/historic-lows", response_model=UnifiedResponse)
+def get_historic_lows(limit: int = Query(10, ge=1, le=50)):
+    """Deals at their all time lowest price based on KAIROS insights."""
+    from core.models import PriceInsight
+    with get_session() as session:
+        insights = (
+            session.query(PriceInsight, Product, Store)
+            .join(Product, Product.id == PriceInsight.product_id)
+            .outerjoin(Store, Store.id == PriceInsight.cheapest_store_id)
+            .filter(PriceInsight.is_deal_now == True)
+            .filter(PriceInsight.deal_score >= 80)
+            .order_by(PriceInsight.deal_score.desc())
+            .limit(limit)
+            .all()
+        )
+        
+        results = []
+        for insight, product, store in insights:
+            if not store: continue
+            results.append({
+                "product_id": product.id,
+                "product_name": product.canonical_name,
+                "brand": product.brand,
+                "image_url": product.image_url,
+                "store_name": store.name,
+                "store_slug": store.slug,
+                "store_logo": store.logo_url,
+                "price": insight.min_price_all_time,
+                "min_price_all_time": insight.min_price_all_time,
+                "deal_score": insight.deal_score
+            })
+            
+        return UnifiedResponse(data=results)
+
+
+@router.post("/optimize/ultraplan", response_model=UnifiedResponse)
+def run_ultraplan(product_ids: list[int]):
+    """
+    Lógica 'Ultraplan': Algoritmo avanzado que calcula la ruta de compra óptima
+    para una canasta de productos específica, cruzando múltiples tiendas y ofertas.
+    """
+    from domain.planner import ShoppingPlanner
+    planner = ShoppingPlanner(product_ids)
+    plan = planner.optimize_plan()
+    return UnifiedResponse(data=plan)
