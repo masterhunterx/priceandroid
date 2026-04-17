@@ -210,7 +210,7 @@ async def on_message(message):
             await message.channel.send("No tienes permisos para usar este comando.")
             return
         import requests as _req
-        import zipfile, io, hashlib
+        import hashlib, json as _json
         NETLIFY_TOKEN   = os.getenv("NETLIFY_TOKEN", "")
         NETLIFY_SITE_ID = os.getenv("NETLIFY_SITE_ID", "")
         if not NETLIFY_TOKEN or not NETLIFY_SITE_ID:
@@ -220,54 +220,103 @@ async def on_message(message):
         parts = content.split()
         action = parts[1].lower() if len(parts) > 1 else "status"
 
-        MAINTENANCE_HTML = b"""<!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FreshCart - Mantenimiento</title>
-<style>body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
-h1{font-size:2rem;margin-bottom:.5rem}p{color:#94a3b8}</style></head>
-<body><div><h1>&#x1F6E0; En mantenimiento</h1><p>FreshCart estara de vuelta pronto.</p></div></body></html>"""
+        MAINTENANCE_HTML = """\
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FreshCart &mdash; En Mantenimiento</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;
+         min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .card{text-align:center;padding:3rem 2rem;max-width:480px}
+    .icon{margin-bottom:1.5rem}
+    .icon svg{width:80px;height:80px;animation:spin 3s linear infinite}
+    @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+    h1{font-size:1.9rem;font-weight:700;margin-bottom:.75rem;
+       background:linear-gradient(135deg,#38bdf8,#818cf8);
+       -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    p{color:#94a3b8;font-size:1rem;line-height:1.6;margin-bottom:1.5rem}
+    .badge{display:inline-block;background:#1e293b;border:1px solid #334155;
+           color:#38bdf8;font-size:.8rem;padding:.4rem 1rem;border-radius:999px;
+           letter-spacing:.05em}
+    .dots span{display:inline-block;width:8px;height:8px;border-radius:50%;
+               background:#38bdf8;margin:0 3px;
+               animation:bounce .8s ease-in-out infinite}
+    .dots span:nth-child(2){animation-delay:.15s}
+    .dots span:nth-child(3){animation-delay:.3s}
+    @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-10px)}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a10 10 0 1 0 10 10"/>
+        <path d="M12 6v6l4 2"/>
+        <path d="M16.5 2.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/>
+      </svg>
+    </div>
+    <h1>Estamos mejorando FreshCart</h1>
+    <p>El sitio se encuentra temporalmente en mantenimiento.<br>
+       Volvemos pronto con novedades.</p>
+    <div class="dots" style="margin-bottom:1.5rem">
+      <span></span><span></span><span></span>
+    </div>
+    <span class="badge">&#x1F6CD;&#xFE0F; FreshCart &mdash; Volvemos pronto</span>
+  </div>
+</body>
+</html>"""
+
+        def _netlify_deploy_files(html: str) -> tuple[int, dict]:
+            """Deploya via file-digest API para garantizar Content-Type correcto."""
+            html_bytes = html.encode("utf-8")
+            sha1 = hashlib.sha1(html_bytes).hexdigest()
+            # 1. Crear deploy con manifiesto de archivos
+            r1 = _req.post(
+                f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys",
+                headers={**netlify_headers, "Content-Type": "application/json"},
+                json={"files": {"/index.html": sha1}, "async": False},
+                timeout=20,
+            )
+            if r1.status_code not in (200, 201):
+                return r1.status_code, r1.json()
+            deploy_id = r1.json()["id"]
+            # 2. Subir el archivo HTML
+            r2 = _req.put(
+                f"https://api.netlify.com/api/v1/deploys/{deploy_id}/files/index.html",
+                headers={**netlify_headers, "Content-Type": "application/octet-stream"},
+                data=html_bytes,
+                timeout=20,
+            )
+            return r2.status_code, r2.json() if r2.content else {}
 
         try:
             if action == "off":
-                # Guardar deploy actual para poder restaurarlo luego
                 r_site = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
-                current_deploy_id = r_site.json().get("deploy_id", "")
+                prev_deploy_id = r_site.json().get("deploy_id", "")
 
-                # Crear zip en memoria con la página de mantenimiento
-                buf = io.BytesIO()
-                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                    zf.writestr("index.html", MAINTENANCE_HTML)
-                buf.seek(0)
-
-                # Deployar el zip de mantenimiento
-                r = _req.post(
-                    f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys",
-                    headers={**netlify_headers, "Content-Type": "application/zip"},
-                    data=buf.read(),
-                    timeout=30,
-                )
-                if r.status_code in (200, 201):
-                    deploy_data = r.json()
-                    new_deploy_id = deploy_data.get("id", "")
+                status, data = _netlify_deploy_files(MAINTENANCE_HTML)
+                if status in (200, 201):
                     await message.channel.send(
                         f"Frontend **desactivado**. Pagina de mantenimiento activa.\n"
-                        f"`!frontend on` para restaurar (deploy anterior: `{current_deploy_id[:12]}`)"
+                        f"`!frontend on` para restaurar (deploy anterior: `{prev_deploy_id[:12]}`)"
                     )
-                    logger.info(f"[KAIROS BOT] Frontend desactivado. Deploy mantenimiento: {new_deploy_id}. Anterior: {current_deploy_id}")
+                    logger.info(f"[KAIROS BOT] Frontend desactivado. Anterior: {prev_deploy_id}")
                 else:
-                    await message.channel.send(f"Error al desactivar: HTTP {r.status_code} — {r.text[:200]}")
+                    await message.channel.send(f"Error al desactivar: HTTP {status} — {str(data)[:200]}")
 
             elif action == "on":
-                # Obtener lista de deploys y restaurar el ultimo 'real' (no de mantenimiento)
+                r_site = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
+                current_deploy_id = r_site.json().get("deploy_id", "")
                 r_deploys = _req.get(
-                    f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys?per_page=10",
-                    headers=netlify_headers, timeout=10
+                    f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}/deploys?per_page=15",
+                    headers=netlify_headers, timeout=10,
                 )
                 deploys = r_deploys.json()
-                # El deploy actual (mantenimiento) es el primero de la lista — lo saltamos
-                current_deploy_id = r_deploys.json()[0]["id"] if deploys else ""
-                r_site2 = _req.get(f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_ID}", headers=netlify_headers, timeout=10)
-                current_deploy_id = r_site2.json().get("deploy_id", "")
                 restore_id = None
                 for dep in deploys:
                     if dep.get("state") == "ready" and dep.get("id") and dep["id"] != current_deploy_id:
