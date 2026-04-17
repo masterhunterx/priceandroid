@@ -132,9 +132,10 @@ DEFAULT_STORES = [
 
 def _apply_migrations(engine):
     """
-    Aplica migraciones incrementales para columnas nuevas en tablas existentes.
-    SQLAlchemy create_all no agrega columnas a tablas ya existentes, así que
-    hacemos un ALTER TABLE manual idempotente.
+    Migraciones incrementales idempotentes — única fuente de verdad para cambios de esquema.
+    Reemplaza el uso de Alembic para este proyecto: más simple, sin archivos de versión,
+    y compatible con Railway (sin acceso directo al shell para correr `alembic upgrade`).
+    Cada entrada es (tabla, columna, tipo, default_sql). Seguro ejecutar varias veces.
     """
     # (table, column, type, default_value_sql)
     migrations = [

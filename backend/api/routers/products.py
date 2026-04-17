@@ -60,11 +60,17 @@ def search_products(
     if len(q) > 100:
         raise HTTPException(status_code=400, detail="El término de búsqueda es demasiado largo.")
 
-    # Tracking de búsquedas por usuario (solo JWT users, no API keys largas)
+    # Tracking de búsquedas — Prometheus + contador de trending
     if q and current_user and len(current_user) <= 30:
         try:
             from core.metrics import user_searches_total
             user_searches_total.labels(username=current_user).inc()
+        except Exception:
+            pass
+    if q:
+        try:
+            from .deals import track_search_term
+            track_search_term(q)
         except Exception:
             pass
 
@@ -111,11 +117,25 @@ def search_products(
         total = main_query.count()
         offset = (page - 1) * page_size
 
-        # Para ordenamiento por precio necesitamos una muestra mayor y ordenar en memoria
-        # (los precios viven en Price, no en StoreProduct, así que no se puede ORDER BY en SQL directo)
         if sort in ("price_asc", "price_desc"):
-            sample_size = page_size * 5
-            store_prods_sample = main_query.limit(sample_size).offset(offset).all()
+            # JOIN con subquery de último precio para ordenar en SQL — elimina el sort en memoria
+            latest_price_sq = (
+                session.query(
+                    Price.store_product_id.label("sp_id"),
+                    func.min(Price.price).label("min_price"),
+                )
+                .filter(Price.branch_id == None)
+                .group_by(Price.store_product_id)
+                .subquery("lp")
+            )
+            ordered_query = main_query.outerjoin(
+                latest_price_sq, StoreProduct.id == latest_price_sq.c.sp_id
+            )
+            if sort == "price_asc":
+                ordered_query = ordered_query.order_by(latest_price_sq.c.min_price.asc().nullslast())
+            else:
+                ordered_query = ordered_query.order_by(latest_price_sq.c.min_price.desc().nullsfirst())
+            store_prods_sample = ordered_query.limit(page_size).offset(offset).all()
         elif sort == "name":
             store_prods_sample = main_query.order_by(StoreProduct.name.asc()).limit(page_size).offset(offset).all()
         else:
@@ -211,11 +231,7 @@ def search_products(
                 is_favorite=False
             ))
 
-        # Ordenar resultados en memoria según el parámetro sort
-        if sort == "price_asc":
-            results.sort(key=lambda p: p.best_price if p.best_price is not None else float('inf'))
-        elif sort == "price_desc":
-            results.sort(key=lambda p: p.best_price if p.best_price is not None else 0.0, reverse=True)
+        # Para name/default el orden ya viene del SQL; price_asc/desc también — no hay sort en memoria
 
         return UnifiedResponse(data=SearchResponse(
             results=results[:page_size],

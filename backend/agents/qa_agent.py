@@ -112,6 +112,7 @@ def check_zero_price_in_stock(db) -> list[dict]:
 def check_price_anomalies(db) -> list[dict]:
     """Detecta cambios de precio >80% entre los últimos 2 registros."""
     from sqlalchemy import text
+    cutoff_48h = datetime.now(UTC) - timedelta(hours=48)
     result = db.execute(text("""
         SELECT sp.id, s.name, sp.name, p1.price AS old_price, p2.price AS new_price
         FROM store_products sp
@@ -122,10 +123,10 @@ def check_price_anomalies(db) -> list[dict]:
           AND p1.price > 0
           AND p2.price > 0
           AND ABS(p2.price - p1.price) / p1.price > :threshold
-          AND p2.scraped_at >= NOW() - INTERVAL '48 hours'
+          AND p2.scraped_at >= :cutoff
         ORDER BY ABS(p2.price - p1.price) / p1.price DESC
         LIMIT 10
-    """), {"threshold": PRICE_ANOMALY_THRESHOLD}).fetchall()
+    """), {"threshold": PRICE_ANOMALY_THRESHOLD, "cutoff": cutoff_48h}).fetchall()
 
     if not result:
         return []
@@ -210,13 +211,14 @@ def check_unmatched_products(db) -> list[dict]:
 def check_empty_stores(db) -> list[dict]:
     """Tiendas que tienen 0 productos en stock."""
     from sqlalchemy import text
+    # Compatible SQLite + PostgreSQL: subquery en lugar de FILTER aggregate
     result = db.execute(text("""
-        SELECT s.name,
-               COUNT(*) FILTER (WHERE sp.in_stock = TRUE) AS in_stock_count
+        SELECT s.name
         FROM stores s
-        LEFT JOIN store_products sp ON sp.store_id = s.id
-        GROUP BY s.name
-        HAVING COUNT(*) FILTER (WHERE sp.in_stock = TRUE) = 0
+        WHERE (
+            SELECT COUNT(*) FROM store_products sp
+            WHERE sp.store_id = s.id AND sp.in_stock = 1
+        ) = 0
     """)).fetchall()
 
     if not result:
@@ -233,16 +235,17 @@ def check_empty_stores(db) -> list[dict]:
 def check_absurd_prices(db) -> list[dict]:
     """Precios fuera del rango válido (<100 o >10M CLP)."""
     from sqlalchemy import text
+    cutoff_24h = datetime.now(UTC) - timedelta(hours=24)
     result = db.execute(text("""
         SELECT sp.id, s.name, sp.name, p.price
         FROM prices p
         JOIN store_products sp ON p.store_product_id = sp.id
         JOIN stores s ON sp.store_id = s.id
-        WHERE p.scraped_at >= NOW() - INTERVAL '24 hours'
+        WHERE p.scraped_at >= :cutoff
           AND (p.price < :min_price OR p.price > :max_price)
           AND p.price IS NOT NULL AND p.price > 0
         LIMIT 20
-    """), {"min_price": MIN_VALID_PRICE, "max_price": MAX_VALID_PRICE}).fetchall()
+    """), {"cutoff": cutoff_24h, "min_price": MIN_VALID_PRICE, "max_price": MAX_VALID_PRICE}).fetchall()
 
     if not result:
         return []

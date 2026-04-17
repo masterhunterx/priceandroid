@@ -89,19 +89,15 @@ def generate_proactive_alerts():
         now = datetime.now(UTC)
         today_str = now.strftime("%Y-%m-%d")
 
-        # ── 1. Purge: read + notifications older than 24 h ──────────────────
-        stale = (
-            session.query(Notification)
-            .filter(
-                (Notification.is_read == True) |
-                (Notification.created_at < now - timedelta(hours=24))
-            )
-            .all()
-        )
-        for n in stale:
-            session.delete(n)
+        # ── 1. Purge: DELETE directo — sin cargar objetos en memoria ────────
+        from sqlalchemy import text as _text
+        cutoff_24h = now - timedelta(hours=24)
+        purged = session.execute(_text("""
+            DELETE FROM notifications
+            WHERE is_read = TRUE OR created_at < :cutoff
+        """), {"cutoff": cutoff_24h}).rowcount
         session.flush()
-        print(f"  [KAIROS] Purgadas {len(stale)} notificaciones antiguas/revisadas.")
+        print(f"  [KAIROS] Purgadas {purged} notificaciones antiguas/revisadas.")
 
         # ── 2. Check current unread count ────────────────────────────────────
         unread_count = (

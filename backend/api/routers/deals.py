@@ -5,6 +5,7 @@ Router para la visualización de descuentos activos, productos tendencia y plani
 extrema de ahorro (Ultraplan).
 """
 
+from collections import Counter
 from typing import Optional
 from fastapi import APIRouter, Query, Depends
 from core.db import get_session
@@ -12,6 +13,31 @@ from core.models import Product, StoreProduct, Price, Store
 from sqlalchemy import func
 from ..schemas import UnifiedResponse, CategoryOut, DealOut
 from ..middleware import get_api_key
+
+# Contador en memoria de búsquedas — se acumula en el proceso, se resetea con cada deploy
+_search_counter: Counter = Counter()
+
+_TERM_EMOJI: dict = {
+    "leche": "🥛", "cerveza": "🍺", "arroz": "🍚", "pan": "🍞",
+    "aceite": "🍳", "yogurt": "🥛", "detergente": "🧼", "atún": "🐟",
+    "huevos": "🥚", "pollo": "🍗", "carne": "🥩", "queso": "🧀",
+    "vino": "🍷", "agua": "💧", "jugo": "🥤", "cereal": "🌾",
+    "café": "☕", "pasta": "🍝", "azúcar": "🍬", "sal": "🧂",
+}
+
+def track_search_term(term: str) -> None:
+    """Registra una búsqueda en el contador en memoria."""
+    t = term.strip().lower()
+    if len(t) >= 2:
+        _search_counter[t] += 1
+
+_STATIC_FALLBACK = [
+    {"term": "Leche", "icon": "🥛"},   {"term": "Arroz", "icon": "🍚"},
+    {"term": "Aceite", "icon": "🍳"},  {"term": "Huevos", "icon": "🥚"},
+    {"term": "Yogurt", "icon": "🥛"},  {"term": "Cerveza", "icon": "🍺"},
+    {"term": "Atún", "icon": "🐟"},    {"term": "Detergente", "icon": "🧼"},
+    {"term": "Pan", "icon": "🍞"},
+]
 
 router = APIRouter(
     prefix="/api",
@@ -21,22 +47,15 @@ router = APIRouter(
 
 @router.get("/trending", response_model=UnifiedResponse)
 async def get_trending_searches():
-    """
-    Entrega una lista de las búsquedas más populares del día.
-    Ayuda al usuario a identificar categorías de interés común en tiempo real.
-    """
-    trending = [
-        {"term": "Jack Daniels", "icon": "🥃"},
-        {"term": "Yogurt", "icon": "🔥"},
-        {"term": "Leche", "icon": "🥛"},
-        {"term": "Huevos", "icon": "🥚"},
-        {"term": "Aceite", "icon": "🍳"},
-        {"term": "Arroz", "icon": "🍚"},
-        {"term": "Atún", "icon": "🐟"},
-        {"term": "Cerveza", "icon": "🍺"},
-        {"term": "Detergente", "icon": "🧼"}
-    ]
-    return UnifiedResponse(data=trending)
+    """Búsquedas más frecuentes desde el último deploy (contador en memoria)."""
+    if len(_search_counter) >= 5:
+        top = _search_counter.most_common(9)
+        result = []
+        for term, _ in top:
+            emoji = next((v for k, v in _TERM_EMOJI.items() if k in term), "🔍")
+            result.append({"term": term.capitalize(), "icon": emoji})
+        return UnifiedResponse(data=result)
+    return UnifiedResponse(data=_STATIC_FALLBACK)
 
 
 _CATEGORY_MAP = [
