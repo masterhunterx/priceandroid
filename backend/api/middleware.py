@@ -79,7 +79,7 @@ def _get_real_ip(request: Request) -> str:
 async def shield_security_middleware(request: Request, call_next):
     """Middleware de defensa activa: rate limiting, bloqueo de IPs y WAF."""
     # /metrics es consumido exclusivamente por Grafana Cloud — bypass del shield
-    if request.url.path == "/metrics":
+    if request.url.path.startswith("/metrics"):
         return await call_next(request)
 
     ip = _get_real_ip(request)

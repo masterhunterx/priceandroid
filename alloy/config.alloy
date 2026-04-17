@@ -7,7 +7,7 @@ prometheus.scrape "freshcart_backend" {
   }]
 
   scheme          = "https"
-  metrics_path    = "/metrics"
+  metrics_path    = "/metrics/"
   scrape_interval = "60s"
   scrape_timeout  = "15s"
 
