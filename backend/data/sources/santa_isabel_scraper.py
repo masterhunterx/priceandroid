@@ -38,16 +38,10 @@ _ai_fallback_count = 0
 MAX_FALLBACKS = 5
 
 try:
-    import requests
+    from curl_cffi import requests as cffi_requests
 except ImportError:
-    print("[ERROR] 'requests' library required. Install with: pip install requests")
+    print("[ERROR] 'curl_cffi' library required. Install with: pip install curl_cffi")
     sys.exit(1)
-
-try:
-    from playwright.sync_api import sync_playwright
-except ImportError:
-    print("[WARN] 'playwright' library not found. Search will fall back to legacy/BFF methods.")
-    sync_playwright = None
 
 
 # ---------------------------------------------------------------------------
@@ -91,107 +85,16 @@ REQUEST_DELAY = 1.0
 # ---------------------------------------------------------------------------
 
 def create_session():
-    """Create a requests session with appropriate headers and initialized VTEX segment."""
-    session = requests.Session()
+    """Create a curl_cffi session con Chrome TLS impersonation para bypasear Akamai/Cencosud CDN."""
+    session = cffi_requests.Session(impersonate="chrome124")
     session.headers.update(HEADERS)
-    try:
-        # 1. Warm up the base domain
-        session.get(BASE_URL, timeout=10)
-        
-        # 2. Get the VTEX segment cookie for Santa Isabel (sc=1)
-        # This provides the necessary context for the BFF to return products.
-        segment_url = f"{BASE_URL}/api/segments/getsegment?sc=1"
-        resp = session.get(segment_url, timeout=10)
-        
-        # If the segment is returned in the body, try to set it manually in cookies if missing
-        if "vtex_segment" not in session.cookies and resp.status_code == 200:
-            try:
-                segment_data = resp.json()
-                # Some VTEX sites allow setting the context via cookie or header
-                pass
-            except:
-                pass
-        
-    except Exception as e:
-        print(f"  [WARN] Session initialization failed: {e}")
     return session
 
 
-def fetch_products_page_playwright(query, from_idx, to_idx):
-    """
-    Fetch products using a headless browser (Playwright).
-    This is the most robust method against WAF/bot blocking.
-    """
-    if not sync_playwright:
-        print("  [ERROR] Playwright not installed. Cannot use browser bypass.")
-        return [], 0
-
-    url = f"https://www.santaisabel.cl/busqueda?ft={query}"
-    products = []
-    total = 0
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-        page = context.new_page()
-        
-        try:
-            print(f"  [Browser] Navigating to {url}...")
-            # Navigate and wait for the renderData to be available
-            page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            
-            # Wait a few seconds for hydration
-            page.wait_for_timeout(3000)
-            
-            # Extract data from window.__renderData
-            render_data = page.evaluate("window.__renderData")
-            
-            if render_data:
-                # Same extraction logic as before but from a live DOM object
-                apps = render_data.get("apps", [])
-                for app in apps:
-                    if "plp" in app.get("name", "").lower():
-                        plp_data = app.get("data", {})
-                        products = plp_data.get("plp_products", {}).get("products", [])
-                        total = plp_data.get("plp_products", {}).get("results", 0)
-                        if products:
-                            break
-            
-            if not products:
-                 # Fallback: deep search for products
-                 def deep_search(obj, key):
-                    if isinstance(obj, dict):
-                        if key in obj: return obj[key]
-                        for v in obj.values():
-                            res = deep_search(v, key)
-                            if res: return res
-                    return None
-                 
-                 products = deep_search(render_data, "products")
-                 total = deep_search(render_data, "results") or 0
-
-        except Exception as e:
-            print(f"  [ERROR] Playwright extraction failed: {e}")
-        finally:
-            browser.close()
-
-    return products, total
-
-
 def fetch_products_page(session, query, from_idx, to_idx, store_id="pedrofontova"):
-    """
-    Main entry point for fetching Santa Isabel products.
-    Uses Playwright for the first page to bypass locks, then falls back to session-based if needed.
-    """
-    # Use Playwright for initial search to get the catalog unlocked
-    if from_idx == 0:
-        return fetch_products_page_playwright(query, from_idx, to_idx)
-
-    # Legacy/BFF Fallback (Still useful for deep paging if session is warm)
+    """Fetch Santa Isabel products via BFF POST API."""
     payload = {
-        "store": store_id,
+        "store": store_id or "pedrofontova",
         "collections": [],
         "fullText": query,
         "brands": [],
@@ -207,50 +110,46 @@ def fetch_products_page(session, query, from_idx, to_idx, store_id="pedrofontova
     try:
         response = session.post(BFF_SEARCH_ENDPOINT, json=payload, timeout=15)
         response.raise_for_status()
-
         data = response.json()
         products = data.get("products", [])
         total_results = data.get("results", 0)
-
         return products, total_results
-
     except Exception as e:
         print(f"  [ERROR] BFF API failed: {e}")
         return [], 0
 
-        if not isinstance(products, list):
-            print(f"  [WARN] Expected list of products, got {type(products).__name__}")
-            return [], total_results
-
-        return products, total_results
-
-    except requests.exceptions.RequestException as e:
-        print(f"  [ERROR] BFF API request failed: {e}")
-        return [], None
-
 
 def fetch_single_product(session, sku_id, store_id=None):
     """
-    Fetch a specific product by its SKU from the Santa Isabel VTEX API.
+    Fetch a specific product by its SKU from the Santa Isabel BFF API.
     Used for JIT (Just-In-Time) synchronization.
     """
-    params = {
-        "fq": f"skuId:{sku_id}"
+    payload = {
+        "store": store_id or "pedrofontova",
+        "collections": [],
+        "fullText": str(sku_id),
+        "brands": [],
+        "hideUnavailableItems": False,
+        "from": 0,
+        "to": 5,
+        "orderBy": "OrderByScoreDESC",
+        "selectedFacets": [],
+        "promotionalCards": False,
+        "sponsoredProducts": False,
     }
-    if store_id:
-        params["sc"] = store_id
-        
-    url = f"{BFF_SEARCH_ENDPOINT}?{urlencode(params)}"
-    
     try:
-        resp = session.get(url, timeout=10)
+        resp = session.post(BFF_SEARCH_ENDPOINT, json=payload, timeout=10)
         if resp.status_code != 200:
             return None
-            
-        products = resp.json()
-        if not products or not isinstance(products, list):
+        data = resp.json()
+        products = data.get("products", [])
+        if not products:
             return None
-            
+        # Buscar el producto con el sku_id exacto
+        for p in products:
+            for item in p.get("items", []):
+                if str(item.get("itemId", "")) == str(sku_id):
+                    return normalize_product(p)
         return normalize_product(products[0])
     except Exception as e:
         print(f"  [ERROR] Single product fetch failed: {e}")
