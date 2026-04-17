@@ -3,11 +3,11 @@
 
 prometheus.scrape "freshcart_backend" {
   targets = [{
-    __address__ = "backend-production-8c5c4.up.railway.app",
-    __scheme__  = "https",
-    __metrics_path__ = "/metrics",
+    __address__ = "backend-production-8c5c4.up.railway.app:443",
   }]
 
+  scheme          = "https"
+  metrics_path    = "/metrics"
   scrape_interval = "60s"
   scrape_timeout  = "15s"
 
