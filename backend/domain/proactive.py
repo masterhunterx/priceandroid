@@ -176,7 +176,9 @@ def generate_proactive_alerts():
                 if savings_pct < MIN_DISCOUNT_PCT and not price.has_discount:
                     continue
 
-                product_id_for_link = sp.product_id if sp.product_id else (1_000_000 + sp.id)
+                if not sp.product_id:
+                    continue  # sin producto canónico → FK violation en Postgres
+                product_id_for_link = sp.product_id
                 if product_id_for_link in recent_notif_pids:
                     continue
 
