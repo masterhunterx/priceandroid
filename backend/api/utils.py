@@ -192,6 +192,25 @@ def build_price_points(
     return price_points
 
 
+def preload_price_insights(db_session, product_ids: List[int]) -> Dict[int, "PriceInsightOut"]:
+    """Carga todos los PriceInsights de una lista de product_ids en UNA sola query."""
+    if not product_ids:
+        return {}
+    rows = db_session.query(PriceInsight).filter(PriceInsight.product_id.in_(product_ids)).all()
+    result = {}
+    for insight in rows:
+        result[insight.product_id] = PriceInsightOut(
+            avg_price=insight.avg_price,
+            min_price_all_time=insight.min_price_all_time,
+            max_price_all_time=insight.max_price_all_time,
+            price_trend=insight.price_trend,
+            is_deal_now=insight.is_deal_now,
+            deal_score=insight.deal_score,
+            last_consolidated=insight.last_consolidated.isoformat() if insight.last_consolidated else ""
+        )
+    return result
+
+
 def get_price_insight(db_session, product_id: int) -> Optional[PriceInsightOut]:
     """
     Recupera los 'Insights' (estadisticas y tendencias) calculados por el sistema inteligente

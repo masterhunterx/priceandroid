@@ -43,137 +43,59 @@ logging.basicConfig(
 logger = logging.getLogger("AntigravityAPI")
 
 # --- AGENTES EN SEGUNDO PLANO ---
-def start_background_agents():
-    """
-    Inicializa los agentes inteligentes que corren de forma asíncrona en hilos separados.
-    Esto permite que la API responda rápido mientras los bots procesan datos.
-    """
-    from agents.fluxengine_sentry import fluxengine_sentry_loop
-    from domain.proactive import generate_proactive_alerts
+def _is_running(name: str) -> bool:
+    return any(t.name == name for t in threading.enumerate())
 
-    # 1. FluxEngine Sentry: Monitorea cambios críticos en el mercado.
-    if not any(t.name == "FluxEngineSentry" for t in threading.enumerate()):
-        sentry_thread = threading.Thread(target=fluxengine_sentry_loop, name="FluxEngineSentry", daemon=True)
-        sentry_thread.start()
+
+def start_background_agents():
+    """Arranca todos los agentes de fondo. Cada agente vive en su propio módulo."""
+    from agents.fluxengine_sentry import fluxengine_sentry_loop
+    from agents.proactive_alert_agent import start_proactive_alert_agent
+    from agents.stock_scan_agent import start_stock_scan_agent
+    from agents.qa_agent import qa_agent_loop
+    from agents.self_healer import self_healer_loop
+    from agents.log_tracker import log_tracker_loop
+    from agents.catalog_sync_scheduler import start_catalog_sync_scheduler
+    from agents.scraper_health_agent import start_scraper_health_agent
+    from agents.security_audit_agent import security_audit_loop
+    from agents.security_healer_agent import security_healer_loop
+
+    if not _is_running("FluxEngineSentry"):
+        threading.Thread(target=fluxengine_sentry_loop, name="FluxEngineSentry", daemon=True).start()
         logger.info("[Sentry] Monitoreo activo inicializado.")
 
-    # 2. KAIROS Proactive Alert Engine: Genera alertas de ahorro cada 15 minutos.
-    _kairos_stop_event = threading.Event()
+    if not _is_running("KairosProactive"):
+        start_proactive_alert_agent()
 
-    def proactive_alert_loop(stop_event: threading.Event):
-        logger.info("[KAIROS] Motor de Alertas Proactivas: Activo.")
+    if not _is_running("StockScanAgent"):
+        start_stock_scan_agent()
 
-        from datetime import datetime, timezone
-        from core.telemetry import TelemetryService
-        from core.db import get_session
-        from core.models import Store, StoreProduct
-
-        start_time = datetime.now(timezone.utc)
-
-        while not stop_event.is_set():
-            try:
-                generate_proactive_alerts()
-
-                # --- Enviar Telemetría (Heartbeat) ---
-                uptime_mins = int((datetime.now(timezone.utc) - start_time).total_seconds() / 60)
-                with get_session() as db:
-                    sc = db.query(Store).count()
-                    pc = db.query(StoreProduct).count()
-                TelemetryService.send_heartbeat(stores_count=sc, products_count=pc, uptime_minutes=uptime_mins)
-
-                # Refrescar métricas Prometheus tras cada ciclo
-                try:
-                    from core.metrics import refresh_catalog_gauges, refresh_feedback_gauges
-                    refresh_catalog_gauges()
-                    refresh_feedback_gauges()
-                except Exception as _me:
-                    logger.debug(f"[Metrics] refresh falló: {_me}")
-
-            except Exception as e:
-                logger.error(f"❌ [KAIROS] Error en motor de alertas: {e}", exc_info=True)
-
-            # Esperar en intervalos de 1s para poder detener el thread rápidamente
-            stop_event.wait(timeout=900)
-
-        logger.info("[KAIROS] Motor proactivo detenido.")
-
-    if not any(t.name == "KairosProactive" for t in threading.enumerate()):
-        proactive_thread = threading.Thread(
-            target=proactive_alert_loop,
-            args=(_kairos_stop_event,),
-            name="KairosProactive",
-            daemon=True
-        )
-        proactive_thread.start()
-        logger.info("[KAIROS] Motor proactivo inicializado.")
-
-    # 3. StockScanAgent: Revisa productos desactualizados cada 6 horas.
-    _catalog_mod = catalog  # capture already-imported module for use inside thread
-
-    def stock_scan_loop():
-        logger.info("[StockAgent] Agente de escaneo periódico de stock: Activo.")
-        # Primera ejecución retrasada 5 minutos para dar tiempo al arranque del servidor
-        time.sleep(300)
-        while True:
-            try:
-                with _catalog_mod._stock_scan_lock:
-                    if not _catalog_mod._stock_scan_state["running"]:
-                        _catalog_mod._stock_scan_state["running"] = True
-                        run_ok = True
-                    else:
-                        run_ok = False
-                if run_ok:
-                    _catalog_mod.run_stock_scan(batch_size=200)
-            except Exception as e:
-                logger.error(f"[StockAgent] Error en ciclo periódico: {e}", exc_info=True)
-            # Esperar 2 horas entre ciclos (antes 6h — acelerado para alcanzar productos sin sync)
-            time.sleep(2 * 3600)
-
-    if not any(t.name == "StockScanAgent" for t in threading.enumerate()):
-        threading.Thread(target=stock_scan_loop, name="StockScanAgent", daemon=True).start()
-        logger.info("[StockAgent] Agente periódico de stock inicializado (cada 6h).")
-
-    # 4. QA Agent: Revisión continua de integridad de datos.
-    if not any(t.name == "QAAgent" for t in threading.enumerate()):
-        from agents.qa_agent import qa_agent_loop
+    if not _is_running("QAAgent"):
         threading.Thread(target=qa_agent_loop, name="QAAgent", daemon=True).start()
         logger.info("[QAAgent] Monitor de integridad inicializado.")
 
-    # 5. Self-Healer: Auto-corrección de datos en BD cada 4h.
-    if not any(t.name == "SelfHealer" for t in threading.enumerate()):
-        from agents.self_healer import self_healer_loop
+    if not _is_running("SelfHealer"):
         threading.Thread(target=self_healer_loop, name="SelfHealer", daemon=True).start()
         logger.info("[SelfHealer] Auto-corrección de BD inicializada.")
 
-    # 6. Log Error Tracker: Detecta errores recurrentes en logs cada 24h.
-    if not any(t.name == "LogTracker" for t in threading.enumerate()):
-        from agents.log_tracker import log_tracker_loop
+    if not _is_running("LogTracker"):
         threading.Thread(target=log_tracker_loop, name="LogTracker", daemon=True).start()
         logger.info("[LogTracker] Tracker de errores de log inicializado.")
 
-    # 7. Catalog Sync Scheduler: Resincronización periódica por tienda.
-    catalog_sync_threads = [t.name for t in threading.enumerate() if t.name.startswith("CatalogSync_")]
-    if not catalog_sync_threads:
-        from agents.catalog_sync_scheduler import start_catalog_sync_scheduler
+    if not any(t.name.startswith("CatalogSync_") for t in threading.enumerate()):
         start_catalog_sync_scheduler()
         logger.info("[CatalogSync] Scheduler de resincronización por tienda inicializado.")
 
-    # 8. Scraper Health Agent: health check + retry automático de not_found.
     health_threads = [t.name for t in threading.enumerate() if t.name in ("ScraperHealthCheck", "ScraperRetry")]
     if len(health_threads) < 2:
-        from agents.scraper_health_agent import start_scraper_health_agent
         start_scraper_health_agent()
         logger.info("[HealthAgent] Agente de salud de scrapers inicializado.")
 
-    # 9. Security Audit Agent: escaneo de vulnerabilidades cada 6h.
-    if not any(t.name == "SecAudit" for t in threading.enumerate()):
-        from agents.security_audit_agent import security_audit_loop
+    if not _is_running("SecAudit"):
         threading.Thread(target=security_audit_loop, name="SecAudit", daemon=True).start()
         logger.info("[SecAudit] Agente de auditoría de seguridad inicializado.")
 
-    # 10. Security Healer Agent: auto-corrección de reportes cada 1h.
-    if not any(t.name == "SecHealer" for t in threading.enumerate()):
-        from agents.security_healer_agent import security_healer_loop
+    if not _is_running("SecHealer"):
         threading.Thread(target=security_healer_loop, name="SecHealer", daemon=True).start()
         logger.info("[SecHealer] Agente de auto-corrección de seguridad inicializado.")
 

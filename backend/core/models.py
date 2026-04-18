@@ -140,7 +140,7 @@ class StoreProduct(Base):
     __tablename__ = "store_products"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    store_id = Column(Integer, ForeignKey("stores.id"), nullable=False)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=False, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)   # Null = chain-wide
     product_id = Column(Integer, ForeignKey("products.id"), nullable=True)  # Null until matched
     external_id = Column(String(200), nullable=False, index=True)  # Store's own product ID
@@ -153,10 +153,10 @@ class StoreProduct(Base):
     category_path = Column(Text, default="")
     top_category = Column(String(200), default="")
     measurement_unit = Column(String(20), default="")
-    in_stock = Column(Boolean, default=True)
+    in_stock = Column(Boolean, default=True, index=True)
     content_hash = Column(String(32), nullable=True)               # MD5 of scraped metadata
     last_seen = Column(DateTime, default=lambda: datetime.now(UTC))
-    last_sync = Column(DateTime, default=lambda: datetime.now(UTC))
+    last_sync = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
@@ -188,13 +188,13 @@ class Price(Base):
     __tablename__ = "prices"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    store_product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False)
+    store_product_id = Column(Integer, ForeignKey("store_products.id"), nullable=False, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True) # Null = chain-wide fallback
     price = Column(Float, nullable=True)                           # Current selling price
     list_price = Column(Float, nullable=True)                      # Original/list price
     promo_price = Column(Float, nullable=True)                     # Promotional price
     promo_description = Column(Text, default="")
-    has_discount = Column(Boolean, default=False)
+    has_discount = Column(Boolean, default=False, index=True)
     savings_amount = Column(Float, nullable=True)                   # list_price - price
     discount_percent = Column(Integer, nullable=True)               # % off list_price
     scraped_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True)

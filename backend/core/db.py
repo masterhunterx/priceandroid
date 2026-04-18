@@ -146,18 +146,41 @@ def _apply_migrations(engine):
         ("branches",             "latitude",          "FLOAT",        None),
         ("branches",             "longitude",         "FLOAT",        None),
     ]
+    is_sqlite = "sqlite" in DATABASE_URL
     for table, column, col_type, default in migrations:
         with engine.connect() as conn:
             try:
+                if is_sqlite:
+                    # SQLite no soporta IF NOT EXISTS en ALTER TABLE — verificar via PRAGMA
+                    existing = {row[1] for row in conn.execute(_sa_text(f"PRAGMA table_info({table})")).fetchall()}
+                    if column in existing:
+                        continue
+                    sql = f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
+                else:
+                    sql = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
                 default_clause = f" DEFAULT {default}" if default else ""
-                conn.execute(
-                    _sa_text(
-                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}{default_clause}"
-                    )
-                )
+                conn.execute(_sa_text(sql + default_clause))
                 conn.commit()
             except Exception:
                 conn.rollback()  # Postgres requiere rollback antes de continuar
+
+    # Índices de rendimiento — idempotentes via IF NOT EXISTS (Postgres y SQLite 3.3+)
+    index_migrations = [
+        ("idx_sp_store_id",       "store_products", "store_id"),
+        ("idx_sp_in_stock",       "store_products", "in_stock"),
+        ("idx_sp_last_sync",      "store_products", "last_sync"),
+        ("idx_price_sp_id",       "prices",         "store_product_id"),
+        ("idx_price_has_discount","prices",         "has_discount"),
+    ]
+    for idx_name, table, column in index_migrations:
+        with engine.connect() as conn:
+            try:
+                conn.execute(_sa_text(
+                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table} ({column})"
+                ))
+                conn.commit()
+            except Exception:
+                conn.rollback()
 
 
 def init_db():

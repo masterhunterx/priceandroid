@@ -43,12 +43,14 @@ def get_catalog_status():
         # Cálculo de porcentaje de cobertura (productos enlazados a una ficha canónica)
         coverage_pct = round((total_matched / total_store_products * 100), 1) if total_store_products > 0 else 0
         
-        # Desglose de productos recolectados por cada supermercado
-        stores = session.query(Store).all()
-        store_stats = []
-        for st in stores:
-            count = session.query(StoreProduct).filter_by(store_id=st.id).count()
-            store_stats.append({"store": st.name, "products": count})
+        # Desglose de productos por tienda — una sola query con GROUP BY
+        rows = (
+            session.query(Store.name, func.count(StoreProduct.id))
+            .join(StoreProduct, StoreProduct.store_id == Store.id)
+            .group_by(Store.id, Store.name)
+            .all()
+        )
+        store_stats = [{"store": name, "products": cnt} for name, cnt in rows]
     
     return UnifiedResponse(data={
         **bot_status,

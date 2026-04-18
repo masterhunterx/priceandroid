@@ -7,6 +7,8 @@ Soporta búsqueda resiliente y optimización de consultas SQL (joinedload).
 
 import json
 import re
+import time
+import threading
 import unicodedata
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Header, BackgroundTasks, Depends
@@ -18,6 +20,7 @@ from ..schemas import UnifiedResponse, SearchResponse, ProductOut, ProductDetail
 from ..utils import (
     build_price_points,
     preload_latest_prices,
+    preload_price_insights,
     get_price_insight,
     check_favorite,
     trigger_jit_sync,
@@ -32,6 +35,29 @@ router = APIRouter(
     tags=["Products"],
     dependencies=[Depends(get_api_key)]
 )
+
+# ── Caché de búsquedas en memoria ─────────────────────────────────────────────
+# Evita golpear la BD en búsquedas repetidas dentro de la ventana TTL.
+_SEARCH_CACHE_TTL = 30  # segundos
+_search_cache: dict[str, tuple[float, object]] = {}  # {cache_key: (timestamp, result)}
+_search_cache_lock = threading.Lock()
+
+def _get_cached(key: str):
+    with _search_cache_lock:
+        entry = _search_cache.get(key)
+        if entry and (time.time() - entry[0]) < _SEARCH_CACHE_TTL:
+            return entry[1]
+    return None
+
+def _set_cached(key: str, value):
+    with _search_cache_lock:
+        # Limpiar entradas expiradas cuando el caché crece (evitar fuga de memoria)
+        if len(_search_cache) > 500:
+            now = time.time()
+            expired = [k for k, (ts, _) in _search_cache.items() if now - ts >= _SEARCH_CACHE_TTL]
+            for k in expired:
+                del _search_cache[k]
+        _search_cache[key] = (time.time(), value)
 
 def _strip_accents(text: str) -> str:
     """Elimina acentos de una cadena de texto para normalización de búsqueda."""
@@ -59,6 +85,12 @@ def search_products(
     q = q.strip()
     if len(q) > 100:
         raise HTTPException(status_code=400, detail="El término de búsqueda es demasiado largo.")
+
+    # Caché de búsqueda — evita queries repetidas dentro del TTL
+    _cache_key = f"{q}|{store}|{category}|{sort}|{page}|{page_size}"
+    cached = _get_cached(_cache_key)
+    if cached is not None:
+        return cached
 
     # Tracking de búsquedas — Prometheus + contador de trending
     if q and current_user and len(current_user) <= 30:
@@ -161,6 +193,9 @@ def search_products(
         # Una sola query para todos los últimos precios
         bulk_prices = preload_latest_prices(session, all_sp_ids) if all_sp_ids else {}
 
+        # Una sola query para todos los insights de precio
+        bulk_insights = preload_price_insights(session, list(canonical_products.keys())) if canonical_products else {}
+
         # Una sola query para todos los favoritos
         fav_product_ids: set = set()
         if canonical_products:
@@ -202,7 +237,7 @@ def search_products(
                             best_price=best_price_val,
                             best_store=b_store,
                             best_store_slug=b_store_slug,
-                            price_insight=get_price_insight(session, p.id),
+                            price_insight=bulk_insights.get(p.id),
                             is_favorite=p.id in fav_product_ids,
                         ))
                         continue
@@ -233,12 +268,14 @@ def search_products(
 
         # Para name/default el orden ya viene del SQL; price_asc/desc también — no hay sort en memoria
 
-        return UnifiedResponse(data=SearchResponse(
+        response = UnifiedResponse(data=SearchResponse(
             results=results[:page_size],
             total=total,
             page=page,
             page_size=page_size,
         ))
+        _set_cached(_cache_key, response)
+        return response
 
 @router.get("/suggestions", response_model=UnifiedResponse)
 def get_search_suggestions(q: str = Query("", min_length=1)):
