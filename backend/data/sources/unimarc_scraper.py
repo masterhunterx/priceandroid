@@ -22,9 +22,10 @@ import time
 from datetime import datetime
 
 try:
-    from domain.normalizer import normalize_scraped_product
+    from domain.normalizer import normalize_scraped_product, short_search_name
 except ImportError:
     def normalize_scraped_product(p): return p  # fallback for standalone use
+    def short_search_name(name, words=4): return " ".join(name.split()[:words])
 
 try:
     from core.ai_service import KairosAIService
@@ -158,7 +159,7 @@ def fetch_single_product(session, sku_id, cluster_id=None, product_name=None):
             return normalize_product(p)
 
     if product_name:
-        short_name = " ".join(product_name.split()[:4])
+        short_name = short_search_name(product_name)
         name_products, _ = fetch_products_page(session, short_name, 1, cluster_id=cluster_id)
         for p in name_products:
             item = p.get("item", {})

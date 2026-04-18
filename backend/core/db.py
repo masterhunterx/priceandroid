@@ -8,7 +8,7 @@ import os
 from contextlib import contextmanager
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text as _sa_text
 from sqlalchemy.orm import sessionmaker
 
 from .models import Base, Store
@@ -151,7 +151,7 @@ def _apply_migrations(engine):
             try:
                 default_clause = f" DEFAULT {default}" if default else ""
                 conn.execute(
-                    __import__("sqlalchemy").text(
+                    _sa_text(
                         f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}{default_clause}"
                     )
                 )

@@ -12,6 +12,8 @@ user always sees fresh opportunities. Each cycle:
 import json
 from datetime import datetime, timezone, timedelta
 
+from sqlalchemy import text as _text
+
 from core.db import get_session
 from core.models import (
     BotState, Notification, Store, StoreProduct, Price, UserPreference
@@ -90,7 +92,6 @@ def generate_proactive_alerts():
         today_str = now.strftime("%Y-%m-%d")
 
         # ── 1. Purge: DELETE directo — sin cargar objetos en memoria ────────
-        from sqlalchemy import text as _text
         cutoff_24h = now - timedelta(hours=24)
         purged = session.execute(_text("""
             DELETE FROM notifications

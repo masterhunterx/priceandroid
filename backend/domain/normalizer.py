@@ -90,3 +90,8 @@ def normalize_scraped_product(product: dict) -> dict:
         product.pop(field, None)
 
     return product
+
+
+def short_search_name(name: str, words: int = 4) -> str:
+    """Trunca un nombre de producto a las primeras N palabras para búsquedas por nombre."""
+    return " ".join(name.split()[:words])

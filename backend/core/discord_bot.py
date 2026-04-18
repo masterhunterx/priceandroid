@@ -162,7 +162,7 @@ async def on_message(message):
             await message.channel.send("No tienes permisos para usar este comando.")
             return
         try:
-            from .models import StoreProduct, Feedback, Store, Price
+            from .models import StoreProduct, Feedback, Price
             from sqlalchemy import func as _func, text as _text
             from datetime import datetime, timezone, timedelta
 
