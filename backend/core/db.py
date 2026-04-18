@@ -130,6 +130,18 @@ DEFAULT_STORES = [
 ]
 
 
+def _column_exists(conn, table: str, column: str, is_sqlite: bool) -> bool:
+    """Comprueba si una columna existe en la tabla (compatible con SQLite y Postgres)."""
+    if is_sqlite:
+        rows = conn.execute(_sa_text(f"PRAGMA table_info({table})")).fetchall()
+        return column in {row[1] for row in rows}
+    rows = conn.execute(_sa_text(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_name = :t AND column_name = :c"
+    ), {"t": table, "c": column}).fetchall()
+    return len(rows) > 0
+
+
 def _apply_migrations(engine):
     """
     Migraciones incrementales idempotentes — única fuente de verdad para cambios de esquema.
@@ -137,6 +149,9 @@ def _apply_migrations(engine):
     y compatible con Railway (sin acceso directo al shell para correr `alembic upgrade`).
     Cada entrada es (tabla, columna, tipo, default_sql). Seguro ejecutar varias veces.
     """
+    import logging as _logging
+    _mig_log = _logging.getLogger("AntigravityAPI")
+
     # (table, column, type, default_value_sql)
     migrations = [
         ("user_assistant_state", "chat_history_json", "TEXT",         None),
@@ -151,19 +166,16 @@ def _apply_migrations(engine):
     for table, column, col_type, default in migrations:
         with engine.connect() as conn:
             try:
-                if is_sqlite:
-                    # SQLite no soporta IF NOT EXISTS en ALTER TABLE — verificar via PRAGMA
-                    existing = {row[1] for row in conn.execute(_sa_text(f"PRAGMA table_info({table})")).fetchall()}
-                    if column in existing:
-                        continue
-                    sql = f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
-                else:
-                    sql = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
+                if _column_exists(conn, table, column, is_sqlite):
+                    continue
                 default_clause = f" DEFAULT {default}" if default else ""
-                conn.execute(_sa_text(sql + default_clause))
+                sql = f"ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}"
+                conn.execute(_sa_text(sql))
                 conn.commit()
-            except Exception:
-                conn.rollback()  # Postgres requiere rollback antes de continuar
+                _mig_log.info(f"[Migration] Columna añadida: {table}.{column}")
+            except Exception as _e:
+                conn.rollback()
+                _mig_log.error(f"[Migration] Falló {table}.{column}: {_e}")
 
     # Índices de rendimiento — idempotentes via IF NOT EXISTS (Postgres y SQLite 3.3+)
     index_migrations = [
