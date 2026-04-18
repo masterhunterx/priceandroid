@@ -548,6 +548,111 @@ async def on_message(message):
             await message.channel.send(f"Error al consultar reportes: {e}")
         return
 
+    # ── !status ────────────────────────────────────────────────────────────────
+    if cmd == "!status":
+        if not _is_authorized(message.author):
+            await message.channel.send("No tienes permisos para usar este comando.")
+            return
+        import requests as _req
+        import time as _time
+
+        await message.channel.send("🔍 Verificando estado de los servicios...")
+
+        lines = []
+        now_str = __import__("datetime").datetime.utcnow().strftime("%d/%m/%Y %H:%M UTC")
+
+        # ── 1. Backend API ──────────────────────────────────────────────────────
+        backend_url = os.getenv("RAILWAY_PUBLIC_DOMAIN", "backend-production-8c5c4.up.railway.app")
+        api_key     = os.getenv("API_KEY", "")
+        try:
+            t0  = _time.time()
+            res = _req.get(
+                f"https://{backend_url}/api/stores",
+                headers={"X-API-Key": api_key},
+                timeout=8,
+            )
+            ms = int((_time.time() - t0) * 1000)
+            if res.status_code == 200:
+                lines.append(f"🟢 Backend API    ONLINE   {ms}ms")
+            else:
+                lines.append(f"🟡 Backend API    HTTP {res.status_code}   {ms}ms")
+        except Exception as e:
+            lines.append(f"🔴 Backend API    OFFLINE  ({e})")
+
+        # ── 2. Base de datos ────────────────────────────────────────────────────
+        try:
+            t0 = _time.time()
+            with get_session() as s:
+                count = s.query(StoreProduct).count()
+            ms = int((_time.time() - t0) * 1000)
+            lines.append(f"🟢 PostgreSQL     ONLINE   {ms}ms  ({count:,} productos)")
+        except Exception as e:
+            lines.append(f"🔴 PostgreSQL     OFFLINE  ({e})")
+
+        # ── 3. Métricas / Alloy ─────────────────────────────────────────────────
+        try:
+            t0  = _time.time()
+            res = _req.get(f"https://{backend_url}/metrics/", timeout=6)
+            ms  = int((_time.time() - t0) * 1000)
+            if res.status_code == 200 and "process_" in res.text:
+                lines.append(f"🟢 Metrics/Alloy  ONLINE   {ms}ms")
+            else:
+                lines.append(f"🟡 Metrics/Alloy  HTTP {res.status_code}   {ms}ms")
+        except Exception as e:
+            lines.append(f"🔴 Metrics/Alloy  OFFLINE  ({e})")
+
+        # ── 4. Deploy activo en Railway (via GraphQL API) ───────────────────────
+        railway_token   = os.getenv("RAILWAY_API_TOKEN", "")
+        railway_svc_id  = os.getenv("RAILWAY_SERVICE_ID", "")
+        railway_env_id  = os.getenv("RAILWAY_ENVIRONMENT_ID", "")
+        try:
+            gql = """
+            query($svcId: String!, $envId: String!) {
+              deployments(input: { serviceId: $svcId, environmentId: $envId }) {
+                edges { node { status createdAt } }
+              }
+            }"""
+            resp = _req.post(
+                "https://backboard.railway.app/graphql/v2",
+                headers={"Authorization": f"Bearer {railway_token}", "Content-Type": "application/json"},
+                json={"query": gql, "variables": {"svcId": railway_svc_id, "envId": railway_env_id}},
+                timeout=8,
+            )
+            edges = resp.json().get("data", {}).get("deployments", {}).get("edges", [])
+            if edges:
+                latest = edges[0]["node"]
+                status_str = latest.get("status", "UNKNOWN")
+                created    = (latest.get("createdAt") or "")[:16].replace("T", " ")
+                icon = "🟢" if status_str == "SUCCESS" else ("🟡" if status_str in ("DEPLOYING", "BUILDING") else "🔴")
+                lines.append(f"{icon} Railway Deploy   {status_str:<12} último: {created}")
+            else:
+                lines.append("⚪ Railway Deploy  Sin datos")
+        except Exception as e:
+            lines.append(f"⚪ Railway Deploy  Error: {e}")
+
+        # ── 5. Circuit breakers ─────────────────────────────────────────────────
+        try:
+            from core.circuit_breaker import get_all_status
+            cb_status = get_all_status()
+            if cb_status:
+                icons = {"closed": "🟢", "open": "🔴", "half_open": "🟡"}
+                cb_lines = []
+                for store, info in cb_status.items():
+                    icon = icons.get(info["state"], "⚪")
+                    extra = f" (recupera en {info['recovers_in_min']}min)" if info.get("recovers_in_min") else ""
+                    cb_lines.append(f"  {icon} {store:<14} {info['state'].upper()}{extra}")
+                lines.append("\nCircuit Breakers:")
+                lines.extend(cb_lines)
+        except Exception:
+            pass
+
+        await message.channel.send(
+            f"**Estado de Servicios — {now_str}**\n```\n" +
+            "\n".join(lines) +
+            "\n```"
+        )
+        return
+
     # ── !cb ────────────────────────────────────────────────────────────────────
     if cmd == "!cb":
         if not _is_authorized(message.author):
@@ -582,6 +687,7 @@ async def on_message(message):
             "**KAIROS Bot — Comandos disponibles**\n"
             "```\n"
             "── Información ──────────────────────────────\n"
+            "!status             → Estado de Backend, DB, Alloy y Railway\n"
             "!stats              → Estadísticas del sistema\n"
             "!usuarios           → Lista de usuarios registrados\n"
             "!feedback           → Últimos reportes de usuarios\n"
@@ -628,6 +734,7 @@ async def on_message(message):
             "**KAIROS Bot — Comandos disponibles:**\n"
             "```\n"
             "── Información ──────────────────────────────\n"
+            "!status             -> Estado de Backend, DB, Alloy y Railway\n"
             "!stats              -> Estadisticas del sistema\n"
             "!usuarios           -> Lista de usuarios registrados\n"
             "!feedback           -> Ultimos reportes de usuarios\n"
