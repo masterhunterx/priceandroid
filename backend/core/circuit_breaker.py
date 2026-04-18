@@ -34,6 +34,12 @@ def record_failure(store: str) -> bool:
     with _lock:
         s = _get(store)
         s["failures"] += 1
+        # HALF_OPEN: cualquier fallo vuelve a abrir inmediatamente
+        if s["state"] == _HALF_OPEN:
+            s["state"]     = _OPEN
+            s["opened_at"] = time.time()
+            logger.warning(f"[CircuitBreaker] 🔴 Circuito re-ABIERTO para {store} (falló en HALF_OPEN). Pausa de {RECOVERY_TIMEOUT//3600}h.")
+            return True
         if s["state"] == _CLOSED and s["failures"] >= FAILURE_THRESHOLD:
             s["state"]     = _OPEN
             s["opened_at"] = time.time()
