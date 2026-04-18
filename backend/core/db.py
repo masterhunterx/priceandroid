@@ -145,6 +145,7 @@ def _apply_migrations(engine):
         ("pantry_items",         "user_id",           "VARCHAR(100)", "'default_user'"),
         ("branches",             "latitude",          "FLOAT",        None),
         ("branches",             "longitude",         "FLOAT",        None),
+        ("branches",             "verified_at",       "TIMESTAMP",    None),
     ]
     is_sqlite = "sqlite" in DATABASE_URL
     for table, column, col_type, default in migrations:
