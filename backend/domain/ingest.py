@@ -19,11 +19,14 @@ Uso vía CLI:
 
 import argparse
 import hashlib
+import logging
 import sys
 import time
 import threading
 from datetime import datetime, timezone
 import asyncio
+
+logger = logging.getLogger("AntigravityAPI")
 UTC = timezone.utc
 
 # Rate limiter JIT por tienda: evita saturar anti-bots (PerimeterX, Akamai)
