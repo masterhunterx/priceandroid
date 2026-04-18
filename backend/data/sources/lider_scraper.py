@@ -22,19 +22,10 @@ import sys
 import time
 from datetime import datetime
 
-try:
-    from domain.normalizer import normalize_scraped_product
-except ImportError:
-    def normalize_scraped_product(p): return p  # fallback for standalone use
-
-try:
-    from core.ai_service import KairosAIService
-    _ai_service = KairosAIService()
-except Exception:
-    _ai_service = None
-
+from data.sources.scraper_utils import get_normalizer, get_ai_service, MAX_FALLBACKS
+normalize_scraped_product = get_normalizer()
+_ai_service = get_ai_service()
 _ai_fallback_count = 0
-MAX_FALLBACKS = 5
 
 try:
     from curl_cffi import requests as cffi_requests

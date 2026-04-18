@@ -77,20 +77,10 @@ REQUEST_DELAY = 1.5
 # Normalizer import (shared across scrapers)
 # ---------------------------------------------------------------------------
 
-try:
-    from domain.normalizer import normalize_scraped_product
-except ImportError:
-    def normalize_scraped_product(product):
-        return product
-
-try:
-    from core.ai_service import KairosAIService
-    _ai_service = KairosAIService()
-except Exception:
-    _ai_service = None
-
+from data.sources.scraper_utils import get_normalizer, get_ai_service, MAX_FALLBACKS
+normalize_scraped_product = get_normalizer()
+_ai_service = get_ai_service()
 _ai_fallback_count = 0
-MAX_FALLBACKS = 5
 
 
 # ---------------------------------------------------------------------------

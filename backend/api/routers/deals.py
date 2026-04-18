@@ -5,17 +5,19 @@ Router para la visualización de descuentos activos, productos tendencia y plani
 extrema de ahorro (Ultraplan).
 """
 
+import threading
 from collections import Counter
 from typing import Optional
 from fastapi import APIRouter, Query, Depends
 from core.db import get_session
 from core.models import Product, StoreProduct, Price, Store
 from sqlalchemy import func
-from ..schemas import UnifiedResponse, CategoryOut, DealOut
+from ..schemas import UnifiedResponse, DealOut
 from ..middleware import get_api_key
 
-# Contador en memoria de búsquedas — se acumula en el proceso, se resetea con cada deploy
+# Contador en memoria de búsquedas — thread-safe via lock
 _search_counter: Counter = Counter()
+_search_counter_lock = threading.Lock()
 
 _TERM_EMOJI: dict = {
     "leche": "🥛", "cerveza": "🍺", "arroz": "🍚", "pan": "🍞",
@@ -26,10 +28,11 @@ _TERM_EMOJI: dict = {
 }
 
 def track_search_term(term: str) -> None:
-    """Registra una búsqueda en el contador en memoria."""
+    """Registra una búsqueda en el contador en memoria (thread-safe)."""
     t = term.strip().lower()
     if len(t) >= 2:
-        _search_counter[t] += 1
+        with _search_counter_lock:
+            _search_counter[t] += 1
 
 _STATIC_FALLBACK = [
     {"term": "Leche", "icon": "🥛"},   {"term": "Arroz", "icon": "🍚"},
@@ -48,8 +51,10 @@ router = APIRouter(
 @router.get("/trending", response_model=UnifiedResponse)
 async def get_trending_searches():
     """Búsquedas más frecuentes desde el último deploy (contador en memoria)."""
-    if len(_search_counter) >= 5:
-        top = _search_counter.most_common(9)
+    with _search_counter_lock:
+        has_enough = len(_search_counter) >= 5
+        top = _search_counter.most_common(9) if has_enough else []
+    if has_enough:
         result = []
         for term, _ in top:
             emoji = next((v for k, v in _TERM_EMOJI.items() if k in term), "🔍")
@@ -294,6 +299,12 @@ def run_ultraplan(product_ids: list[int]):
     Lógica 'Ultraplan': Algoritmo avanzado que calcula la ruta de compra óptima
     para una canasta de productos específica, cruzando múltiples tiendas y ofertas.
     """
+    if not product_ids:
+        raise HTTPException(status_code=400, detail="La lista de productos no puede estar vacía.")
+    if len(product_ids) > 100:
+        raise HTTPException(status_code=400, detail="Máximo 100 productos por Ultraplan.")
+    if any(pid <= 0 for pid in product_ids):
+        raise HTTPException(status_code=400, detail="IDs de producto inválidos.")
     from domain.planner import ShoppingPlanner
     planner = ShoppingPlanner(product_ids)
     plan = planner.optimize_plan()

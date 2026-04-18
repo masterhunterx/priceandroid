@@ -13,6 +13,9 @@ from datetime import datetime, timezone
 logger = logging.getLogger("AntigravityAPI")
 UTC = timezone.utc
 
+_ALERT_INTERVAL_SECONDS = 900   # 15 min entre ciclos de alertas proactivas
+_STARTUP_DELAY_SECONDS  = 0     # sin retraso inicial para este agente
+
 
 def proactive_alert_loop(stop_event: threading.Event):
     logger.info("[KAIROS] Motor de Alertas Proactivas: Activo.")
@@ -44,7 +47,7 @@ def proactive_alert_loop(stop_event: threading.Event):
         except Exception as e:
             logger.error(f"❌ [KAIROS] Error en motor de alertas: {e}", exc_info=True)
 
-        stop_event.wait(timeout=900)
+        stop_event.wait(timeout=_ALERT_INTERVAL_SECONDS)
 
     logger.info("[KAIROS] Motor proactivo detenido.")
 

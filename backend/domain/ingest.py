@@ -91,9 +91,35 @@ def scrape_store(store_slug: str, query: str, pages: int, store_id: str | None =
         products = search_products(session, query, max_pages=pages, cluster_id=store_id)
 
     else:
-        print(f"  [AVISO] Tienda desconocida: {store_slug}")
+        logger.warning(f"  [AVISO] Tienda desconocida: {store_slug}")
 
     return products
+
+
+def _dispatch_jit_scraper(store_slug: str, sp, ext_branch_id):
+    """Llama al scraper JIT correcto según el slug de tienda. Retorna dict o None."""
+    if store_slug == "jumbo":
+        from data.sources.jumbo_scraper import create_session, fetch_single_product
+        return fetch_single_product(create_session(), sp.sku_id, store_id=ext_branch_id)
+    elif store_slug == "lider":
+        from data.sources.lider_scraper import create_session, fetch_single_product
+        return fetch_single_product(create_session(), sp.external_id, store_id=ext_branch_id)
+    elif store_slug == "santa_isabel":
+        from data.sources.santa_isabel_scraper import create_session, fetch_single_product
+        return fetch_single_product(create_session(), sp.sku_id, store_id=ext_branch_id, product_name=sp.name)
+    elif store_slug == "unimarc":
+        from data.sources.unimarc_scraper import create_session, fetch_single_product
+        return fetch_single_product(create_session(), sp.sku_id, cluster_id=ext_branch_id, product_name=sp.name)
+    return None
+
+
+def _record_sync_metric(store_slug: str, result: str) -> None:
+    """Registra una métrica de sync en Prometheus si está disponible."""
+    try:
+        from core.metrics import sync_operations_total
+        sync_operations_total.labels(store=store_slug, result=result).inc()
+    except Exception as _e:
+        logger.debug(f"[JIT] metrics no disponibles: {_e}")
 
 
 def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = None) -> bool:
@@ -122,16 +148,16 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
         
     ext_branch_id = branch.external_store_id if branch else None
     
-    print(f"  [JIT] Sincronizando {store.name}: {sp.name[:40]} (Sucursal: {ext_branch_id or 'Fija'})...")
-    
+    logger.info(f"  [JIT] Sincronizando {store.name}: {sp.name[:40]} (Sucursal: {ext_branch_id or 'Fija'})...")
+
     # Circuit breaker: no intentar si la tienda está bloqueada por errores repetidos
     try:
         from core.circuit_breaker import is_open
         if is_open(store.slug):
             logger.debug(f"[JIT] Circuito abierto para {store.slug} — omitiendo sync de {sp.id}")
             return False
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug(f"[JIT] circuit_breaker no disponible: {_e}")
 
     # Rate limiter: espaciar requests por tienda para no activar anti-bots
     min_interval = _JIT_MIN_INTERVAL.get(store.slug, _JIT_MIN_INTERVAL["default"])
@@ -145,56 +171,34 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
 
     result = None
     try:
-        if store.slug == "jumbo":
-            from data.sources.jumbo_scraper import create_session, fetch_single_product
-            session = create_session()
-            result = fetch_single_product(session, sp.sku_id, store_id=ext_branch_id)
-
-        elif store.slug == "lider":
-            from data.sources.lider_scraper import create_session, fetch_single_product
-            session = create_session()
-            result = fetch_single_product(session, sp.external_id, store_id=ext_branch_id)
-
-        elif store.slug == "santa_isabel":
-            from data.sources.santa_isabel_scraper import create_session, fetch_single_product
-            session = create_session()
-            result = fetch_single_product(session, sp.sku_id, store_id=ext_branch_id, product_name=sp.name)
-
-        elif store.slug == "unimarc":
-            from data.sources.unimarc_scraper import create_session, fetch_single_product
-            session = create_session()
-            result = fetch_single_product(session, sp.sku_id, cluster_id=ext_branch_id, product_name=sp.name)
-            
-        try:
-            from core.metrics import sync_operations_total, price_updates_total
-            _has_metrics = True
-        except Exception:
-            _has_metrics = False
+        result = _dispatch_jit_scraper(store.slug, sp, ext_branch_id)
 
         if result:
             from .ingest import upsert_store_products
             upsert_store_products(db_session, store, [result], branch=branch)
             sp.last_sync = datetime.now(UTC)
             db_session.commit()
-            if _has_metrics:
-                sync_operations_total.labels(store=store.slug, result="success").inc()
-                price_updates_total.labels(store=store.slug).inc()
+            _record_sync_metric(store.slug, "success")
             try:
                 from core.circuit_breaker import record_success
                 record_success(store.slug)
+            except Exception as _e:
+                logger.debug(f"[JIT] record_success falló: {_e}")
+            try:
+                from core.metrics import price_updates_total
+                price_updates_total.labels(store=store.slug).inc()
             except Exception:
                 pass
             return True
         else:
-            print(f"    [JIT] Producto no encontrado en {store.name}. Marcando como Agotado.")
+            logger.info(f"    [JIT] Producto no encontrado en {store.name}. Marcando como Agotado.")
             sp.in_stock = False
             sp.last_sync = datetime.now(UTC)
             db_session.commit()
-            if _has_metrics:
-                sync_operations_total.labels(store=store.slug, result="not_found").inc()
+            _record_sync_metric(store.slug, "not_found")
             return True
     except (ConnectionError, ValueError) as e:
-        print(f"    [JIT SCRAPER ERROR] {store.name} bloqueó la request para ID {sp.id}: {e}")
+        logger.warning(f"    [JIT SCRAPER ERROR] {store.name} bloqueó la request para ID {sp.id}: {e}")
         db_session.rollback()
         try:
             from core.circuit_breaker import record_failure
@@ -208,28 +212,101 @@ def sync_single_store_product(db_session, sp_id: int, branch_id: int | None = No
                         f"Demasiados errores consecutivos. Sync pausado 2h.\n"
                         f"Último error: `{str(e)[:120]}`"
                     )}, timeout=8)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug(f"[JIT] circuit_breaker/discord falló: {_e}")
         try:
             from core.metrics import sync_operations_total
             sync_operations_total.labels(store=store.slug, result="error").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug(f"[JIT] metrics falló: {_e}")
         return False
     except Exception as e:
-        print(f"    [JIT ERROR] Falló la sincronización para ID {sp.id}: {e}")
+        logger.error(f"    [JIT ERROR] Falló la sincronización para ID {sp.id}: {e}", exc_info=True)
         db_session.rollback()
         try:
             from core.metrics import sync_operations_total
             sync_operations_total.labels(store=store.slug, result="error").inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug(f"[JIT] metrics falló: {_e}")
         return False
 
 
 # ---------------------------------------------------------------------------
 # Inserción en Base de Datos (Optimizado con Hash y Lazy Pricing)
 # ---------------------------------------------------------------------------
+
+def _upsert_product_record(
+    db_session, store_id: int, product_data: dict, branch_id: int | None, new_hash: str
+) -> tuple["StoreProduct", bool, bool]:
+    """
+    Crea o actualiza un StoreProduct. Retorna (sp, is_new, was_updated).
+    image_url solo se escribe al crear, nunca se sobreescribe.
+    """
+    external_id = str(product_data.get("product_id") or product_data.get("sku_id", ""))
+    sp = db_session.query(StoreProduct).filter_by(
+        store_id=store_id,
+        external_id=external_id,
+    ).first()
+
+    if sp:
+        if sp.content_hash == new_hash:
+            sp.in_stock = product_data.get("in_stock", sp.in_stock)
+            sp.last_seen = datetime.now(UTC)
+            return sp, False, False
+        sp.name = product_data.get("name", sp.name)
+        sp.brand = product_data.get("brand", sp.brand)
+        sp.slug = product_data.get("slug", sp.slug)
+        sp.product_url = product_data.get("product_url", sp.product_url)
+        sp.category_path = product_data.get("category_path", sp.category_path)
+        sp.top_category = product_data.get("top_category", sp.top_category)
+        sp.measurement_unit = product_data.get("measurement_unit", sp.measurement_unit)
+        sp.in_stock = product_data.get("in_stock", sp.in_stock)
+        sp.content_hash = new_hash
+        sp.last_seen = datetime.now(UTC)
+        if branch_id and sp.branch_id is None:
+            sp.branch_id = branch_id
+        return sp, False, True
+
+    sp = StoreProduct(
+        store_id=store_id,
+        branch_id=branch_id,
+        external_id=external_id,
+        sku_id=str(product_data.get("sku_id", "")),
+        name=product_data.get("name", ""),
+        brand=product_data.get("brand", ""),
+        slug=product_data.get("slug", ""),
+        product_url=product_data.get("product_url", ""),
+        image_url=product_data.get("image_url", ""),
+        category_path=product_data.get("category_path", ""),
+        top_category=product_data.get("top_category", ""),
+        measurement_unit=product_data.get("measurement_unit", ""),
+        in_stock=product_data.get("in_stock", True),
+        content_hash=new_hash,
+    )
+    db_session.add(sp)
+    db_session.flush()
+    return sp, True, False
+
+
+def _maybe_insert_price(db_session, sp: "StoreProduct", product_data: dict, branch: "Branch | None") -> bool:
+    """Inserta una fila Price solo si el precio real cambió (Lazy Pricing). Retorna True si insertó."""
+    new_price = product_data.get("price")
+    if not price_changed(sp, new_price):
+        return False
+    db_session.add(Price(
+        store_product=sp,
+        branch=branch,
+        price=new_price,
+        list_price=product_data.get("list_price"),
+        promo_price=product_data.get("promo_price"),
+        promo_description=product_data.get("promo_description", ""),
+        has_discount=product_data.get("has_discount", False),
+        savings_amount=product_data.get("savings_amount"),
+        discount_percent=product_data.get("discount_percent"),
+        scraped_at=datetime.now(UTC),
+    ))
+    return True
+
 
 def upsert_store_products(
     db_session,
@@ -239,105 +316,30 @@ def upsert_store_products(
 ) -> list[StoreProduct]:
     """
     Inserta o actualiza productos de la tienda y registra precios condicionalmente.
-
-    Optimizaciones aplicadas:
-      - Detección basada en Hash: salta la actualización de metadatos si el hash coincide.
-      - Lazy Pricing: solo inserta una fila en Price si el valor real ha cambiado.
-      - Política de metadatos estáticos: image_url nunca se sobrescribe tras la creación.
-
-    Args:
-        db_session:        Sesión activa de SQLAlchemy
-        store:             Objeto ORM Store
-        scraped_products:  Lista de productos normalizados del scraper
-        branch:            Objeto ORM Branch opcional (para ingesta por sucursal)
-
-    Returns:
-        Lista de objetos StoreProduct procesados
+    Usa hash para detectar cambios y lazy pricing para evitar escrituras redundantes.
     """
     store_products = []
-    new_count = 0
-    updated_count = 0
-    hash_skipped = 0
-    price_skipped = 0
-    price_inserted = 0
-
+    new_count = updated_count = hash_skipped = price_inserted = price_skipped = 0
     branch_id = branch.id if branch else None
     branch_label = branch.name if branch else "a nivel nacional"
 
     for product_data in scraped_products:
-        external_id = product_data.get("product_id") or product_data.get("sku_id", "")
-        if not external_id:
+        if not (product_data.get("product_id") or product_data.get("sku_id")):
             continue
 
         new_hash = compute_content_hash(product_data)
-        new_price = product_data.get("price")
+        sp, is_new, was_updated = _upsert_product_record(
+            db_session, store.id, product_data, branch_id, new_hash
+        )
 
-        # Buscamos si el StoreProduct ya existe en esta cadena
-        sp = db_session.query(StoreProduct).filter_by(
-            store_id=store.id,
-            external_id=str(external_id),
-        ).first()
-
-        if sp:
-            # --- Detección de cambios por Hash ---
-            if sp.content_hash == new_hash:
-                # Metadatos idénticos: solo actualizamos visibilidad y stock
-                sp.in_stock = product_data.get("in_stock", sp.in_stock)
-                sp.last_seen = datetime.now(UTC)
-                hash_skipped += 1
-            else:
-                # Metadatos han cambiado: actualizamos campos críticos
-                sp.name = product_data.get("name", sp.name)
-                sp.brand = product_data.get("brand", sp.brand)
-                sp.slug = product_data.get("slug", sp.slug)
-                sp.product_url = product_data.get("product_url", sp.product_url)
-                sp.category_path = product_data.get("category_path", sp.category_path)
-                sp.top_category = product_data.get("top_category", sp.top_category)
-                sp.measurement_unit = product_data.get("measurement_unit", sp.measurement_unit)
-                sp.in_stock = product_data.get("in_stock", sp.in_stock)
-                sp.content_hash = new_hash
-                sp.last_seen = datetime.now(UTC)
-                # Registramos sucursal si es la primera vez que se detecta en una específica
-                if branch_id and sp.branch_id is None:
-                    sp.branch_id = branch_id
-                updated_count += 1
-        else:
-            # --- Creación de nuevo StoreProduct ---
-            sp = StoreProduct(
-                store_id=store.id,
-                branch_id=branch_id,
-                external_id=str(external_id),
-                sku_id=str(product_data.get("sku_id", "")),
-                name=product_data.get("name", ""),
-                brand=product_data.get("brand", ""),
-                slug=product_data.get("slug", ""),
-                product_url=product_data.get("product_url", ""),
-                image_url=product_data.get("image_url", ""),  # Protegido tras creación
-                category_path=product_data.get("category_path", ""),
-                top_category=product_data.get("top_category", ""),
-                measurement_unit=product_data.get("measurement_unit", ""),
-                in_stock=product_data.get("in_stock", True),
-                content_hash=new_hash,
-            )
-            db_session.add(sp)
-            db_session.flush() # Poblar sp.id para el chequeo de precios
+        if is_new:
             new_count += 1
+        elif was_updated:
+            updated_count += 1
+        else:
+            hash_skipped += 1
 
-        # --- Lógica de Precios Diferidos (Lazy Pricing) ---
-        if price_changed(sp, new_price):
-            price = Price(
-                store_product=sp,
-                branch=branch, # Vinculamos historia a la sucursal específica
-                price=new_price,
-                list_price=product_data.get("list_price"),
-                promo_price=product_data.get("promo_price"),
-                promo_description=product_data.get("promo_description", ""),
-                has_discount=product_data.get("has_discount", False),
-                savings_amount=product_data.get("savings_amount"),
-                discount_percent=product_data.get("discount_percent"),
-                scraped_at=datetime.now(UTC),
-            )
-            db_session.add(price)
+        if _maybe_insert_price(db_session, sp, product_data, branch):
             price_inserted += 1
         else:
             price_skipped += 1
@@ -345,8 +347,7 @@ def upsert_store_products(
         store_products.append(sp)
 
     db_session.flush()
-
-    print(
+    logger.info(
         f"    {store.name} [{branch_label}]: "
         f"{new_count} nuevos | {updated_count} actualizados | {hash_skipped} sin cambios (hash) | "
         f"{price_inserted} precios grabados | {price_skipped} precios omitidos"

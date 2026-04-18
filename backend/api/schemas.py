@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, conint, conlist
 
 class StoreOut(BaseModel):
     id: int
@@ -143,8 +143,13 @@ class PlanResponse(BaseModel):
     strategy: List[Dict[str, Any]]
 
 
+class CartItem(BaseModel):
+    product_id: conint(gt=0)
+    name: str
+    quantity: conint(ge=1, le=100) = 1
+
 class OptimizeCartRequest(BaseModel):
-    items: List[Dict[str, Any]]
+    items: conlist(CartItem, min_length=1, max_length=100)
 
 
 class ChatMessage(BaseModel):

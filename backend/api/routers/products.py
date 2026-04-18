@@ -97,14 +97,14 @@ def search_products(
         try:
             from core.metrics import user_searches_total
             user_searches_total.labels(username=current_user).inc()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug(f"[search] metrics no disponibles: {_e}")
     if q:
         try:
             from .deals import track_search_term
             track_search_term(q)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug(f"[search] track_search_term falló: {_e}")
 
     branch_map = None
     if x_branch_context:

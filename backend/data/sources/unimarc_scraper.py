@@ -27,14 +27,9 @@ except ImportError:
     def normalize_scraped_product(p): return p  # fallback for standalone use
     def short_search_name(name, words=4): return " ".join(name.split()[:words])
 
-try:
-    from core.ai_service import KairosAIService
-    _ai_service = KairosAIService()
-except Exception:
-    _ai_service = None
-
+from data.sources.scraper_utils import get_ai_service, MAX_FALLBACKS
+_ai_service = get_ai_service()
 _ai_fallback_count = 0
-MAX_FALLBACKS = 5
 
 try:
     from curl_cffi import requests as cffi_requests

@@ -45,9 +45,10 @@ router = APIRouter(
 
 from pydantic import BaseModel
 
+from pydantic import field_validator as _fv, conint as _conint
+
 class FavoriteAction(BaseModel):
-    """Estructura para la acción de favoritos."""
-    product_id: int
+    product_id: _conint(gt=0)
     action: Literal["add", "remove", "toggle"]
 
 ai_service = KairosAIService()
@@ -280,7 +281,8 @@ def assistant_chat_endpoint(req: ChatRequest):
                 context,
                 saved_history=saved_history,
             )
-        except Exception:
+        except Exception as e:
+            logger.error(f"[KAIROS AI] Error en get_chat_response: {e}", exc_info=True)
             raise HTTPException(
                 status_code=504,
                 detail="El cerebro de KAIROS está tomando más tiempo de lo habitual. Por favor, reintenta."
@@ -330,8 +332,8 @@ def assistant_chat_endpoint(req: ChatRequest):
                                 f"bajó de precio hoy en {item.get('store', '')}."
                             )
                             break
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug(f"[KAIROS] deal alert check falló: {_e}")
 
         # ── Generar planes de compra por tienda si hay meal_plan ─────────────
         final_meal_plans = None
