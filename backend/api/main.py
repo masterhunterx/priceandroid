@@ -298,7 +298,6 @@ async def security_middleware_wrapper(request, call_next):
     return await shield_security_middleware(request, call_next)
 
 # --- SECURITY HEADERS ---
-# Añade cabeceras de seguridad a todas las respuestas.
 @app.middleware("http")
 async def security_headers_middleware(request, call_next):
     response = await call_next(request)
@@ -306,9 +305,24 @@ async def security_headers_middleware(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
     if _is_production:
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
     return response
+
+# --- LÍMITE DE TAMAÑO DE REQUEST ---
+_MAX_REQUEST_BODY = 512 * 1024  # 512 KB
+
+@app.middleware("http")
+async def request_size_middleware(request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _MAX_REQUEST_BODY:
+        return JSONResponse(
+            status_code=413,
+            content={"success": False, "error": "Request demasiado grande."}
+        )
+    return await call_next(request)
 
 # --- MANEJADORES DE EXCEPCIONES GLOBALES ---
 app.add_exception_handler(Exception, global_exception_handler)
@@ -364,14 +378,27 @@ app.include_router(pantry.router)
 app.include_router(feedback.router)
 
 # --- TRAMPAS PARA BOTS (HONEYTOKENS) ---
-# Endpoints falsos diseñados para detectar y bloquear scrapers malintencionados inmediatamente.
+def _honeytoken_block(request, label: str):
+    from core.shield import Shield3
+    from api.middleware import _get_real_ip
+    ip = _get_real_ip(request)
+    Shield3.block_ip(ip, reason=f"Honeytoken: {label}")
+    raise HTTPException(status_code=403, detail="SECURITY BREACH: IP BLOCKED BY FLUXENGINE SHIELD.")
+
 @app.get("/api/admin/config/v1/internal_metrics")
 async def honeytoken_internal_metrics(request):
-    """TRAMPA PARA BOTS: Bloqueo de IP instantáneo por acceso sospechoso."""
-    from core.shield import Shield3
-    ip = request.client.host if request.client else "unknown"
-    Shield3.block_ip(ip, reason="Honeytoken Trap Sprung (Internal Metrics Access)")
-    raise HTTPException(status_code=403, detail="SECURITY BREACH: IP BLOCKED BY FLUXENGINE SHIELD.")
+    _honeytoken_block(request, "internal_metrics")
+
+@app.get("/wp-admin")
+@app.get("/wp-login.php")
+@app.get("/admin")
+@app.get("/.env")
+@app.get("/phpinfo.php")
+@app.get("/config.php")
+@app.get("/.git/config")
+@app.get("/api/v1/admin")
+async def honeytoken_common_scans(request):
+    _honeytoken_block(request, request.url.path)
 
 @app.get("/")
 async def root():

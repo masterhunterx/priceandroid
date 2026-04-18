@@ -1,8 +1,19 @@
 import logging
+import re
 import threading
 from datetime import datetime, timezone
 import statistics
 import time
+
+# Patrones WAF — detectan ataques comunes en URLs y query params
+_RE_PATH_TRAVERSAL = re.compile(r"\.\./|%2e%2e[/%]|%252e|/etc/passwd|/proc/self", re.IGNORECASE)
+_RE_SQLI = re.compile(
+    r"(\bunion\b.{0,20}\bselect\b|\bdrop\b.{0,10}\btable\b|"
+    r"1\s*=\s*1|'\s*--|\bxp_cmdshell\b|\bexec\s*\(|\bwaitfor\s+delay\b)",
+    re.IGNORECASE,
+)
+_RE_XSS = re.compile(r"<script|javascript:|on\w+\s*=|<iframe|<svg.{0,30}on", re.IGNORECASE)
+_RE_SSTI = re.compile(r"\{\{.{0,30}\}\}|\$\{.{0,30}\}|<%=.{0,30}%>", re.IGNORECASE)
 
 # Configuración de Logs del sistema de seguridad Shield
 logger = logging.getLogger("FluxShield")
@@ -206,28 +217,37 @@ class Shield3:
         return False, "Integridad de Datos Verificada exitosamente"
 
     @staticmethod
-    def analyze_waf_threat(headers):
+    def analyze_waf_threat(headers, url_path: str = "", query_string: str = ""):
         """
-        Analiza las cabeceras HTTP en busca de firmas de bots conocidos
-        o herramientas de ataque automatizado.
+        Analiza cabeceras HTTP, path y query params en busca de ataques conocidos.
+        Retorna (is_threat, reason).
         """
         ua = headers.get("user-agent", "").lower()
-        
-        # Firmas de herramientas de ataque automatizado — NO incluir curl/wget/postman/python-requests
-        # ya que son herramientas legítimas usadas en CI/CD, monitoreo y scripting.
+
+        # Firmas de herramientas de ataque — excluye curl/wget/postman/python-requests (legítimos)
         bot_signatures = [
             "selenium", "puppeteer", "headless", "sqlmap", "nikto",
             "scrapy", "masscan", "zgrab", "nuclei", "dirbuster",
         ]
-        
         for sig in bot_signatures:
             if sig in ua:
-                return True, f"Firma detectada: {sig}"
-                
-        # Detección de cabeceras sospechosas o incompletas
+                return True, f"Firma de herramienta detectada: {sig}"
+
         if not ua or len(ua) < 10:
             return True, "User-Agent vacío o sospechosamente corto"
-            
+
+        # Inspección de URL path + query string
+        target = f"{url_path}?{query_string}" if query_string else url_path
+        if target:
+            if _RE_PATH_TRAVERSAL.search(target):
+                return True, "Path traversal detectado en URL"
+            if _RE_SQLI.search(target):
+                return True, "Patrón SQL injection detectado en URL"
+            if _RE_XSS.search(target):
+                return True, "Patrón XSS detectado en URL"
+            if _RE_SSTI.search(target):
+                return True, "Patrón SSTI detectado en URL"
+
         return False, "Tráfico limpio verificado"
 
     @staticmethod
