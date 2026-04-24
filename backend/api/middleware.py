@@ -81,7 +81,8 @@ async def get_api_key(request: Request, api_key: str = Security(api_key_header))
         logger.error("[SECURITY] API_KEY no está configurada en las variables de entorno.")
         raise HTTPException(status_code=500, detail="Error de configuración del servidor.")
 
-    if api_key != expected_key:
+    import hmac as _hmac
+    if not _hmac.compare_digest(api_key or "", expected_key):
         client_ip = _get_real_ip(request)
         logger.warning(f"[SECURITY] API Key incorrecta desde IP: {client_ip}")
         if _register_apikey_failure(client_ip):

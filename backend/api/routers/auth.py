@@ -249,8 +249,12 @@ def login(body: LoginRequest, request: Request):
 
     username = body.username.strip().lower()
 
-    # 1. Whitelist
-    if username not in ALLOWED_USERS:
+    # 1. Whitelist + credenciales — mensaje idéntico para evitar enumeración de usuarios
+    stored_pw = ALLOWED_USERS.get(username, "")
+    user_exists = username in ALLOWED_USERS
+    credentials_ok = user_exists and _check_password(body.password, stored_pw)
+
+    if not user_exists:
         logger.warning(f"[AUTH] Usuario no autorizado: '{username}' desde {client_ip}")
         _send_discord(
             f"🚨 **ALERTA DE SEGURIDAD — FreshCart**\n"
@@ -263,12 +267,9 @@ def login(body: LoginRequest, request: Request):
             api_blocked_requests_total.labels(reason="unknown_user").inc()
         except Exception:
             pass
-        raise HTTPException(status_code=403, detail="Acceso denegado. Usuario no autorizado.")
 
-    # 2. Credenciales
-    stored_pw = ALLOWED_USERS.get(username, "")
-    if not _check_password(body.password, stored_pw):
-        logger.warning(f"[AUTH] Contraseña incorrecta para: {username}")
+    if not credentials_ok:
+        logger.warning(f"[AUTH] Credenciales inválidas para: '{username}' desde {client_ip}")
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
 
     # 3. Admin → token directo

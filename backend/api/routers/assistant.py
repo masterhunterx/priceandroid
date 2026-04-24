@@ -165,11 +165,12 @@ def get_notifications(
 
 
 @router.post("/notifications/{notification_id}/read", response_model=UnifiedResponse)
-def mark_notification_read(notification_id: int):
+def mark_notification_read(notification_id: int, current_user: str = Depends(get_api_key)):
     """Marcar una notificación como leída."""
+    user_id = current_user or "default_user"
     with get_session() as session:
         notif = session.get(Notification, notification_id)
-        if not notif:
+        if not notif or notif.user_id != user_id:
             raise HTTPException(status_code=404, detail="Notification not found")
         notif.is_read = True
         session.commit()
@@ -177,11 +178,12 @@ def mark_notification_read(notification_id: int):
 
 
 @router.delete("/notifications/{notification_id}", response_model=UnifiedResponse)
-def delete_notification(notification_id: int):
+def delete_notification(notification_id: int, current_user: str = Depends(get_api_key)):
     """Eliminar una notificación específica."""
+    user_id = current_user or "default_user"
     with get_session() as session:
         notif = session.get(Notification, notification_id)
-        if not notif:
+        if not notif or notif.user_id != user_id:
             raise HTTPException(status_code=404, detail="Notification not found")
         session.delete(notif)
         session.commit()
@@ -205,8 +207,8 @@ def clear_read_notifications(current_user: str = Depends(get_api_key)):
 
 
 @router.post("/notifications/refresh", response_model=UnifiedResponse)
-def refresh_notifications(request: Request):
-    """Ejecutar el motor proactivo de KAIROS manualmente (para pruebas)."""
+def refresh_notifications(request: Request, current_user: str = Depends(get_api_key)):
+    """Ejecutar el motor proactivo de KAIROS manualmente (solo admin)."""
     client_ip = request.client.host if request.client else "unknown"
     if not _check_refresh_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Demasiadas actualizaciones. Espera un minuto.")
@@ -220,7 +222,7 @@ def refresh_notifications(request: Request):
 
 
 @router.get("/chat/state", response_model=UnifiedResponse)
-def get_assistant_state():
+def get_assistant_state(current_user: str = Depends(get_api_key)):
     """Recuperar la memoria persistente del asistente."""
     with get_session() as session:
         ctx = MealPlannerContext()
@@ -237,7 +239,7 @@ def get_assistant_state():
 
 
 @router.get("/chat/history", response_model=UnifiedResponse)
-def get_chat_history():
+def get_chat_history(current_user: str = Depends(get_api_key)):
     """Devuelve el historial completo de la conversación guardada en sesión."""
     with get_session() as session:
         ctx = MealPlannerContext()
@@ -247,7 +249,7 @@ def get_chat_history():
 
 
 @router.delete("/chat/history", response_model=UnifiedResponse)
-def clear_chat_history():
+def clear_chat_history(current_user: str = Depends(get_api_key)):
     """Borra el historial de conversación (nueva sesión limpia)."""
     with get_session() as session:
         ctx = MealPlannerContext()
@@ -258,7 +260,7 @@ def clear_chat_history():
 
 
 @router.post("/chat", response_model=UnifiedResponse)
-def assistant_chat_endpoint(req: ChatRequest):
+def assistant_chat_endpoint(req: ChatRequest, current_user: str = Depends(get_api_key)):
     """
     Endpoint principal del Asistente KAIROS.
     Gestiona la interacción con la IA, el contexto del usuario, el historial de sesión
