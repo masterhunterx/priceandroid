@@ -78,6 +78,15 @@ def analyze_promo(promo_description: str) -> Dict[str, Any]:
     return res
 
 
+def _infer_unit_label(measurement_unit: str) -> str | None:
+    unit = (measurement_unit or "").lower().strip()
+    if unit in ("g", "gr", "grs", "gramos", "kg", "kgs"):
+        return "$/100g"
+    if unit in ("ml", "cc", "l", "lt", "lts", "litro", "litros"):
+        return "$/100ml"
+    return None
+
+
 _LOCAL_LOGOS: Dict[str, str] = {
     "jumbo": "/logos/jumbo.png",
     "lider": "/logos/lider.png",
@@ -169,6 +178,15 @@ def build_price_points(
         is_club = p_info["offer_type"] == "card"
         price_based_in_stock = bool(latest and latest.price and latest.price > 0)
 
+        # Staleness: datos sin refrescar más de 6 horas
+        _STALE_HOURS = 6
+        is_stale = False
+        if sp.last_sync:
+            sync_dt = sp.last_sync if sp.last_sync.tzinfo else sp.last_sync.replace(tzinfo=UTC)
+            is_stale = (datetime.now(UTC) - sync_dt) > timedelta(hours=_STALE_HOURS)
+        else:
+            is_stale = True
+
         price_points.append(PricePointOut(
             store_id=store.id,
             store_name=store.name,
@@ -187,6 +205,9 @@ def build_price_points(
             offer_type=p_info["offer_type"],
             club_price=curr_price if is_club else None,
             unit_price=p_info["unit_price"],
+            price_per_unit=sp.unit_price_norm,
+            unit_label=_infer_unit_label(sp.measurement_unit),
+            is_stale=is_stale,
         ))
 
     return price_points

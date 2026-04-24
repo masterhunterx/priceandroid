@@ -263,6 +263,7 @@ def _upsert_product_record(
         sp.category_path    = product_data.get("category_path", sp.category_path)
         sp.top_category     = product_data.get("top_category", sp.top_category)
         sp.measurement_unit = product_data.get("measurement_unit", sp.measurement_unit)
+        sp.unit_price_norm  = product_data.get("unit_price_norm", sp.unit_price_norm)
         sp.in_stock         = product_data.get("in_stock", sp.in_stock)
         sp.content_hash     = new_hash
         sp.last_seen        = now
@@ -284,6 +285,7 @@ def _upsert_product_record(
         category_path=product_data.get("category_path", ""),
         top_category=product_data.get("top_category", ""),
         measurement_unit=product_data.get("measurement_unit", ""),
+        unit_price_norm=product_data.get("unit_price_norm"),
         in_stock=product_data.get("in_stock", True),
         content_hash=new_hash,
         last_sync=now,

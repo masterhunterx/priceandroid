@@ -152,7 +152,8 @@ class StoreProduct(Base):
     image_url = Column(Text, default="")
     category_path = Column(Text, default="")
     top_category = Column(String(200), default="")
-    measurement_unit = Column(String(20), default="")
+    measurement_unit  = Column(String(20), default="")
+    unit_price_norm   = Column(Float, nullable=True)   # $/100g o $/100ml normalizado
     in_stock = Column(Boolean, default=True, index=True)
     content_hash = Column(String(32), nullable=True)               # MD5 of scraped metadata
     last_seen = Column(DateTime, default=lambda: datetime.now(UTC))

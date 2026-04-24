@@ -25,12 +25,6 @@ function buildStoreSearchUrl(storeSlug: string, productName: string): string {
   }
 }
 
-/** Retorna true si el precio tiene más de 48h sin actualizarse */
-function isPriceStale(lastSync: string | null | undefined): boolean {
-  if (!lastSync) return true;
-  const diff = Date.now() - new Date(lastSync).getTime();
-  return diff > 48 * 60 * 60 * 1000;
-}
 
 const ProductDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -470,10 +464,10 @@ const ProductDetails: React.FC = () => {
                                 {pricePoint.card_label || pricePoint.promo_description}
                               </span>
                             )}
-                            {isPriceStale(pricePoint.last_sync) ? (
+                            {pricePoint.is_stale ? (
                               <span className="text-[9px] text-amber-500 font-bold flex items-center gap-0.5">
                                 <span className="material-symbols-outlined text-[10px]">warning</span>
-                                Precio estimado — verificar en tienda
+                                {pricePoint.store_slug === 'lider' ? 'Posible bloqueo PerimeterX' : 'Dato desactualizado +6h'}
                               </span>
                             ) : (
                               <span className="text-[9px] text-slate-400 font-medium">Sinc: {getRelativeTime(pricePoint.last_sync)}</span>
@@ -510,10 +504,17 @@ const ProductDetails: React.FC = () => {
                                    Socio: {formatCurrency(pricePoint.club_price)}
                                  </p>
                                )}
-                               
+
                                {/* Always show the normal/list price if it's different */}
                                {(pricePoint.list_price && pricePoint.list_price > (pricePoint.unit_price || pricePoint.price || 0)) && (
                                  <p className="text-[10px] text-slate-400 line-through">Normal: {formatCurrency(pricePoint.list_price)}</p>
+                               )}
+
+                               {/* Normalized unit price ($/100g or $/100ml) */}
+                               {pricePoint.price_per_unit != null && pricePoint.unit_label && (
+                                 <p className="text-[9px] text-sky-400 font-bold mt-0.5 bg-sky-500/10 px-1.5 py-0.5 rounded">
+                                   ~{formatCurrency(pricePoint.price_per_unit)}/{pricePoint.unit_label.replace('$/', '')}
+                                 </p>
                                )}
                             </div>
                           </>

@@ -84,9 +84,63 @@ def _run_match_batch(db) -> dict:
     # run_matching retorna lista de match dicts; contamos los nuevos
     stats["new_links"]    = sum(1 for m in result if m.get("new_link"))
     stats["new_products"] = sum(1 for m in result if m.get("new_product"))
-    stats["after"]        = _count_unmatched(db)
 
+    # Promover huérfanos restantes a fichas canónicas propias (mono-tienda)
+    promoted = _promote_solo_products(db)
+    stats["promoted_solo"] = promoted
+    if promoted:
+        logger.info(f"[MatchPipeline] {promoted} productos promovidos a ficha propia (sin par cruzado)")
+
+    stats["after"] = _count_unmatched(db)
     return stats
+
+
+# ---------------------------------------------------------------------------
+# Promoción de productos sin emparejar a fichas canónicas propias
+# ---------------------------------------------------------------------------
+
+def _promote_solo_products(db) -> int:
+    """
+    Crea fichas canónicas (Product) para StoreProducts que siguen sin product_id
+    después del matcher. Así son visibles en la app aunque no tengan comparación
+    cruzada entre tiendas. Retorna el número de productos promovidos.
+    """
+    from core.models import StoreProduct, Product, ProductMatch
+    from domain.matcher import extract_weight, clean_product_name
+
+    orphans = (
+        db.query(StoreProduct)
+        .filter(StoreProduct.product_id == None)
+        .limit(BATCH_SIZE)
+        .all()
+    )
+    promoted = 0
+    for sp in orphans:
+        weight_val, weight_unit = extract_weight(sp.name)
+        canonical = Product(
+            canonical_name=clean_product_name(sp.name) or sp.name,
+            brand=sp.brand or "",
+            category=sp.top_category or "",
+            category_path=sp.category_path or "",
+            weight_value=weight_val,
+            weight_unit=weight_unit,
+            image_url=sp.image_url or "",
+        )
+        db.add(canonical)
+        db.flush()
+        sp.product_id = canonical.id
+        db.add(ProductMatch(
+            product_id=canonical.id,
+            store_product_id=sp.id,
+            match_score=1.0,
+            match_method="solo",
+            verified=False,
+        ))
+        promoted += 1
+
+    if promoted:
+        db.flush()
+    return promoted
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +160,8 @@ def _discord_report(stats: dict) -> None:
         f"```\n"
         f"Sin emparejar antes : {stats['before']:,}\n"
         f"Sin emparejar ahora : {stats['after']:,}\n"
-        f"Emparejados         : {resolved:,}\n"
+        f"Emparejados (cruce) : {resolved - stats.get('promoted_solo', 0):,}\n"
+        f"Promovidos (solo)   : {stats.get('promoted_solo', 0):,}\n"
         f"Fichas canónicas    : {stats['new_products']:,} nuevas\n"
         f"Links creados       : {stats['new_links']:,}\n"
         f"```"

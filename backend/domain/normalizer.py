@@ -34,6 +34,30 @@ _DEPRECATED_DISCOUNT_FIELDS = {
 }
 
 
+def compute_unit_price(price: float, measurement_unit: str, unit_multiplier: float):
+    """
+    Normaliza el precio a $/100g o $/100ml para permitir comparación justa entre tamaños.
+    Retorna (unit_price: float | None, unit_label: str | None).
+    """
+    if not price or price <= 0:
+        return None, None
+
+    unit = (measurement_unit or "").lower().strip()
+    mult = float(unit_multiplier or 1)
+    if mult <= 0:
+        return None, None
+
+    if unit in ("g", "gr", "grs", "gramos"):
+        return round(price / mult * 100, 1), "$/100g"
+    if unit in ("kg", "kgs", "kilogramo", "kilogramos"):
+        return round(price / (mult * 1000) * 100, 1), "$/100g"
+    if unit in ("ml", "cc", "mililitros"):
+        return round(price / mult * 100, 1), "$/100ml"
+    if unit in ("l", "lt", "lts", "litro", "litros"):
+        return round(price / (mult * 1000) * 100, 1), "$/100ml"
+    return None, None
+
+
 def normalize_scraped_product(product: dict) -> dict:
     """
     Accept a raw scraper output dictionary and return a clean, unified
@@ -73,6 +97,17 @@ def normalize_scraped_product(product: dict) -> dict:
     # ------------------------------------------------------------------
     if "unit_multiplier" not in product or product["unit_multiplier"] is None:
         product["unit_multiplier"] = 1
+
+    # ------------------------------------------------------------------
+    # 2b. Normalized unit price ($/100g or $/100ml)
+    # ------------------------------------------------------------------
+    up_val, up_label = compute_unit_price(
+        price,
+        product.get("measurement_unit", ""),
+        product.get("unit_multiplier", 1),
+    )
+    product["unit_price_norm"]  = up_val
+    product["unit_label"]       = up_label
 
     # ------------------------------------------------------------------
     # 3. Strip UI-only display string fields

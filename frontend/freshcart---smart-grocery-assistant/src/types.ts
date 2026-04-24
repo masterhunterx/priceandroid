@@ -22,6 +22,9 @@ export interface PricePoint {
   offer_type?: string;          // 'card', 'internet', 'app', 'generic'
   club_price?: number | null;
   unit_price?: number | null;
+  price_per_unit?: number | null;  // $/100g o $/100ml normalizado
+  unit_label?: string | null;      // "$/100g", "$/100ml"
+  is_stale?: boolean;              // datos > 6h sin refresh (backend)
   // Compatibility for older mocks
   storeId?: string | number;
   originalPrice?: number | null;

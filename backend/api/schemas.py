@@ -47,6 +47,9 @@ class PricePointOut(BaseModel):
     offer_type: str = "generic"
     club_price: Optional[float] = None
     unit_price: Optional[float] = None
+    price_per_unit: Optional[float] = None   # $/100g o $/100ml normalizado
+    unit_label: Optional[str] = None         # "$/100g", "$/100ml"
+    is_stale: bool = False                   # datos > 6h sin refresh
 
 
 class PriceHistoryOut(BaseModel):

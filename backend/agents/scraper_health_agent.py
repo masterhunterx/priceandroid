@@ -209,7 +209,69 @@ def retry_loop() -> None:
         time.sleep(RETRY_INTERVAL_SEC)
 
 
+# ---------------------------------------------------------------------------
+# Staleness monitor — alerta cuando alguna tienda lleva > 6h sin datos frescos
+# ---------------------------------------------------------------------------
+
+_STALE_HOURS = 6
+_stale_alerted: dict[str, bool] = {}
+
+def run_staleness_check() -> None:
+    """
+    Detecta tiendas cuyo último sync es > STALE_HOURS horas.
+    Envía una alerta a Discord con la antigüedad exacta de los datos.
+    Lider es la tienda más propensa a bloquearse (PerimeterX).
+    """
+    from core.db import get_session
+    from sqlalchemy import text
+
+    cutoff = datetime.now(UTC) - timedelta(hours=_STALE_HOURS)
+    with get_session() as db:
+        rows = db.execute(text("""
+            SELECT s.slug, s.name, MAX(sp.last_sync) as latest_sync
+            FROM store_products sp
+            JOIN stores s ON sp.store_id = s.id
+            GROUP BY s.id, s.slug, s.name
+        """)).fetchall()
+
+    now = datetime.now(UTC)
+    for row in rows:
+        slug, name, latest_sync = row.slug, row.name, row.latest_sync
+        if latest_sync is None:
+            continue
+        if latest_sync.tzinfo is None:
+            latest_sync = latest_sync.replace(tzinfo=UTC)
+        age_h = (now - latest_sync).total_seconds() / 3600
+
+        if age_h > _STALE_HOURS:
+            if not _stale_alerted.get(slug):
+                _stale_alerted[slug] = True
+                _discord(
+                    f"⏰ **[StaleAlert] {name.upper()} — datos desactualizados**\n"
+                    f"Último sync: `{age_h:.1f}h` atrás (umbral: {_STALE_HOURS}h)\n"
+                    f"{'⚠️ Lider usa PerimeterX — puede estar bloqueado.' if slug == 'lider' else ''}\n"
+                    f"Verifica el CircuitBreaker o lanza un sync manual."
+                )
+                logger.warning(f"[StaleAlert] {slug} sin datos frescos hace {age_h:.1f}h")
+        else:
+            if _stale_alerted.get(slug):
+                _stale_alerted[slug] = False
+                logger.info(f"[StaleAlert] {slug} recuperó datos frescos (age={age_h:.1f}h)")
+
+
+def staleness_loop() -> None:
+    logger.info("[StaleAlert] Monitor de datos desactualizados iniciado (cada 2h).")
+    time.sleep(600)  # 10 min tras arranque
+    while True:
+        try:
+            run_staleness_check()
+        except Exception as e:
+            logger.error(f"[StaleAlert] Error: {e}")
+        time.sleep(7200)  # cada 2h
+
+
 def start_scraper_health_agent() -> None:
     threading.Thread(target=health_check_loop, name="ScraperHealthCheck", daemon=True).start()
     threading.Thread(target=retry_loop,        name="ScraperRetry",       daemon=True).start()
-    logger.info("[HealthAgent] Agente de salud de scrapers iniciado (health check + retry).")
+    threading.Thread(target=staleness_loop,    name="StaleAlert",         daemon=True).start()
+    logger.info("[HealthAgent] Agente de salud de scrapers iniciado (health check + retry + stale alert).")
