@@ -59,6 +59,9 @@ def start_background_agents():
     from agents.scraper_health_agent import start_scraper_health_agent
     from agents.security_audit_agent import security_audit_loop
     from agents.security_healer_agent import security_healer_loop
+    from agents.feedback_pipeline import feedback_pipeline_loop
+    from agents.price_pipeline import price_pipeline_loop
+    from agents.match_pipeline import match_pipeline_loop
 
     if not _is_running("FluxEngineSentry"):
         threading.Thread(target=fluxengine_sentry_loop, name="FluxEngineSentry", daemon=True).start()
@@ -98,6 +101,18 @@ def start_background_agents():
     if not _is_running("SecHealer"):
         threading.Thread(target=security_healer_loop, name="SecHealer", daemon=True).start()
         logger.info("[SecHealer] Agente de auto-corrección de seguridad inicializado.")
+
+    if not _is_running("FeedbackPipeline"):
+        threading.Thread(target=feedback_pipeline_loop, name="FeedbackPipeline", daemon=True).start()
+        logger.info("[FeedbackPipeline] Pipeline de resolución de feedback inicializado.")
+
+    if not _is_running("PricePipeline"):
+        threading.Thread(target=price_pipeline_loop, name="PricePipeline", daemon=True).start()
+        logger.info("[PricePipeline] Pipeline de notificaciones de precios inicializado.")
+
+    if not _is_running("MatchPipeline"):
+        threading.Thread(target=match_pipeline_loop, name="MatchPipeline", daemon=True).start()
+        logger.info("[MatchPipeline] Pipeline de emparejamiento canónico inicializado.")
 
 
 @asynccontextmanager
