@@ -64,7 +64,7 @@ HEADERS = {
     "Content-Type": "application/json",
     "Referer": "https://www.jumbo.cl/",
     # API key observed from Jumbo's BFF requests
-    "apikey": "REDACTED_JUMBO_CATALOG_KEY",
+    "apikey": os.getenv("JUMBO_API_KEY", "REDACTED_JUMBO_CATALOG_KEY"),
     "x-client-platform": "web",
     "x-client-version": "3.3.44",
 }

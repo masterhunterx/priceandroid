@@ -133,6 +133,25 @@ def heal_absurd_prices(db) -> int:
     return count
 
 
+def heal_stale_out_of_stock(db) -> int:
+    """
+    Marca como sin stock productos in_stock=True que no han sido vistos en más de 7 días.
+    Cubre el caso de productos que desaparecieron del sitio sin pasar por JIT.
+    """
+    from sqlalchemy import text
+    cutoff = datetime.now(UTC) - timedelta(days=7)
+    result = db.execute(text("""
+        UPDATE store_products
+        SET in_stock = FALSE, last_sync = NOW()
+        WHERE in_stock = TRUE
+          AND last_seen < :cutoff
+        RETURNING id
+    """), {"cutoff": cutoff})
+    count = result.rowcount
+    db.commit()
+    return count
+
+
 def heal_stale_price_history(db) -> int:
     """Elimina registros de precios con más de 90 días para controlar el tamaño de la tabla."""
     from sqlalchemy import text
@@ -161,6 +180,7 @@ def run_self_healer() -> dict:
         ("orphan_prices",        heal_orphan_prices),
         ("missing_last_sync",    heal_missing_last_sync),
         ("absurd_prices",        heal_absurd_prices),
+        ("stale_out_of_stock",   heal_stale_out_of_stock),
         ("stale_price_history",  heal_stale_price_history),
     ]
 
@@ -195,6 +215,7 @@ def _discord_summary(results: dict) -> None:
         "orphan_prices":       "Precios huérfanos",
         "missing_last_sync":   "last_sync inicializado",
         "absurd_prices":       "Precios absurdos",
+        "stale_out_of_stock":  "Marcados sin stock (>7d sin ver)",
     }
     lines = [f"**🩺 Self-Healer — {total_fixed} correcciones** `{ts} UTC`"]
     for key, count in results.items():
