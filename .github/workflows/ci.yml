@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests (no network)
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          API_KEY: test-key
+          ENVIRONMENT: development
+        run: |
+          python -m pytest tests/test_matcher.py tests/test_security_and_validation.py -v --tb=short
+
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/freshcart---smart-grocery-assistant/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend/freshcart---smart-grocery-assistant
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend/freshcart---smart-grocery-assistant
+        run: npm run build

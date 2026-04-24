@@ -15,7 +15,6 @@ import { LocationProvider } from './context/LocationContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import SplashScreen from './components/SplashScreen';
-import ShoppingAssistant from './pages/ShoppingAssistant';
 import Cart from './pages/Cart';
 import { CartProvider } from './context/CartContext';
 import FeedbackButton from './components/FeedbackButton';
@@ -78,11 +77,6 @@ const AppContent: React.FC = () => {
             <Route path="/categories" element={
               <ProtectedRoute>
                 <PageTransition><Categories /></PageTransition>
-              </ProtectedRoute>
-            } />
-            <Route path="/assistant" element={
-              <ProtectedRoute>
-                <PageTransition><ShoppingAssistant /></PageTransition>
               </ProtectedRoute>
             } />
             <Route path="/favorites" element={

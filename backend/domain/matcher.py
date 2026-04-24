@@ -246,8 +246,12 @@ NAME_WEIGHT = 0.30
 CATEGORY_WEIGHT = 0.10
 
 # Thresholds
-AUTO_MATCH_THRESHOLD = 0.75
+AUTO_MATCH_THRESHOLD = 0.80
 CANDIDATE_THRESHOLD = 0.50
+
+# Minimum name similarity required for auto-match regardless of brand/weight.
+# Prevents "Pan Lactal" from matching "Pan Integral" when brand+weight are identical.
+MIN_NAME_SCORE = 0.65
 
 
 # Hard penalty applied when two products have known sizes that differ by > 2x.
@@ -347,6 +351,9 @@ def compute_match_score(product_a, product_b):
         (["polvo"], ["liquida", "líquida"]),
         (["con gas", "gasificada"], ["sin gas"]),
         (["blanco"], ["tinto", "rose", "rosé", "carmenere", "merlot", "cabernet", "dorado"]),
+        (["integral", "integrales"], ["lactal", "molde", "blanco"]),
+        (["light", "lite", "zero", "sin azucar"], ["original", "clasico", "clásico", "regular"]),
+        (["sin lactosa"], ["con lactosa", "entera", "semidescremada"]),
     ]
     
     name_a_low = name_a.lower()
@@ -382,6 +389,11 @@ def compute_match_score(product_a, product_b):
         ratio = min(wa, wb) / max(wa, wb) if max(wa, wb) > 0 else 0
         if ratio < 0.5:  # sizes differ by more than 2x
             score -= SIZE_MISMATCH_PENALTY
+
+    # Minimum name similarity guard: even with perfect brand+weight match,
+    # divergent names (different variants) must not auto-match.
+    if ns < MIN_NAME_SCORE and score >= AUTO_MATCH_THRESHOLD:
+        score = CANDIDATE_THRESHOLD - 0.01
 
     return round(max(score, 0.0), 4)
 

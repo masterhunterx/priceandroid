@@ -397,11 +397,22 @@ const SearchResults: React.FC = () => {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <StoreLogo slug={product.best_store_slug || ''} name={product.best_store || ''} className="size-4" />
                                   <p className="text-slate-500 text-[10px]">
                                     Mejor precio en <span className="font-bold text-primary">{product.best_store}</span>
                                   </p>
+                                  {best.price_per_unit != null && best.unit_label && (
+                                    <span className="text-[9px] text-sky-400 font-bold bg-sky-500/10 px-1.5 py-0.5 rounded">
+                                      ~{formatCurrency(best.price_per_unit)}/{best.unit_label.replace('$/', '')}
+                                    </span>
+                                  )}
+                                  {best.is_stale && (
+                                    <span className="text-[9px] text-amber-500 font-bold flex items-center gap-0.5">
+                                      <span className="material-symbols-outlined text-[10px]">warning</span>
+                                      {best.store_slug === 'lider' ? 'Posible bloqueo PerimeterX' : '+6h sin actualizar'}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             );

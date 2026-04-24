@@ -10,7 +10,7 @@ const BottomNav: React.FC = () => {
   const navItems = [
     { name: 'Inicio',    path: '/',          icon: 'home' },
     { name: 'Buscar',    path: '/search',     icon: 'search' },
-    { name: 'KAIROS',   path: '/assistant',  icon: 'auto_awesome', isCentral: true },
+    { name: 'Categorías', path: '/categories', icon: 'grid_view', isCentral: true },
     { name: 'Favoritos', path: '/favorites',  icon: 'favorite' },
     { name: 'Carro',     path: '/cart',       icon: 'shopping_cart', badge: itemCount },
   ];

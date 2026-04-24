@@ -71,8 +71,9 @@ PAGE_SIZE = 40
 # NOTE: Lider branch discovery is blocked by CAPTCHA; pass IDs manually.
 DEFAULT_STORE_ID = None
 
-# Rate limiting (seconds between requests)
-REQUEST_DELAY = 1.0
+# Rate limiting: base delay + jitter to avoid PX pattern detection
+REQUEST_DELAY_BASE = 1.2
+REQUEST_DELAY_JITTER = (0.5, 2.5)  # added randomly each request
 
 # GraphQL query - minimal version requesting only the fields we need
 SEARCH_QUERY = """query Search(
@@ -174,7 +175,8 @@ def _warm_session(session):
     """GET homepage para obtener cookies PX antes de llamar a la API GraphQL."""
     try:
         session.get("https://www.lider.cl/supermercado", timeout=10)
-        time.sleep(_random.uniform(1.5, 3.0))
+        # PX necesita tiempo para registrar la sesión como legítima
+        time.sleep(_random.uniform(2.5, 5.0))
     except Exception:
         pass
 
@@ -278,7 +280,8 @@ def fetch_products_page(session, query, page, store_id=None):
                 if attempt == 0:
                     session = create_session()
                     _warm_session(session)
-                    time.sleep(3 + _random.uniform(2, 4))
+                    backoff = 8 + _random.uniform(4, 12)  # 12-20s: PX necesita tiempo para "olvidar"
+                    time.sleep(backoff)
                     continue
                 return [], None
 
@@ -486,7 +489,7 @@ def search_products(session, query, max_pages=1, store_id=None):
             break
 
         if page < max_pages:
-            time.sleep(REQUEST_DELAY)
+            time.sleep(REQUEST_DELAY_BASE + _random.uniform(*REQUEST_DELAY_JITTER))
 
     return all_products
 

@@ -27,7 +27,7 @@ from .middleware import (
     shield_security_middleware, 
 )
 from .exceptions import global_exception_handler, http_exception_handler
-from .routers import products, stores, assistant, catalog, deals, pantry, auth, feedback
+from .routers import products, stores, catalog, deals, pantry, auth, feedback
 from .schemas import UnifiedResponse
 
 # --- CONFIGURACIÓN DE LOGS ---
@@ -322,7 +322,6 @@ async def db_status(request):
 app.include_router(auth.router)        # Público — login/refresh/me
 app.include_router(products.router)
 app.include_router(stores.router)
-app.include_router(assistant.router)
 app.include_router(catalog.router)
 app.include_router(deals.router)
 app.include_router(pantry.router)
