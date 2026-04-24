@@ -182,6 +182,7 @@ def _apply_migrations(engine):
         ("idx_sp_store_id",       "store_products", "store_id"),
         ("idx_sp_in_stock",       "store_products", "in_stock"),
         ("idx_sp_last_sync",      "store_products", "last_sync"),
+        ("idx_sp_stock_sync",     "store_products", "in_stock, last_sync"),
         ("idx_price_sp_id",       "prices",         "store_product_id"),
         ("idx_price_has_discount","prices",         "has_discount"),
     ]

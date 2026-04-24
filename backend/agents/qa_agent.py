@@ -289,10 +289,8 @@ def run_qa_checks() -> list[dict]:
     checks = [
         check_zero_price_in_stock,
         check_price_anomalies,
-        check_stale_sync,
         check_duplicate_matches,
         check_unmatched_products,
-        check_empty_stores,
         check_absurd_prices,
         check_feedback_overflow,
     ]

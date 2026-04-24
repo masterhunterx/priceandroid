@@ -30,8 +30,6 @@ _IGNORE_PATTERNS = [
     r"RATE_LIMIT",
     r"WAF_BLOCK",
     r"IP bloqueada",
-    r"Token inválido",
-    r"Credenciales inválidas",
     r"FluxEngine Shield",
     r"Heartbeat",
     r"QAAgent.*Sin correcciones",

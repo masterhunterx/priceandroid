@@ -109,6 +109,7 @@ def _dispatch_jit_scraper(store_slug: str, sp, ext_branch_id):
         return fetch_single_product(create_session(), sp.sku_id, store_id=ext_branch_id, product_name=sp.name)
     elif store_slug == "unimarc":
         from data.sources.unimarc_scraper import create_session, fetch_single_product
+        # Unimarc usa cluster_id en lugar de store_id — es el nombre del parámetro en su API
         return fetch_single_product(create_session(), sp.sku_id, cluster_id=ext_branch_id, product_name=sp.name)
     return None
 

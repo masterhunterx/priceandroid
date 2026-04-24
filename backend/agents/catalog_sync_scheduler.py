@@ -148,21 +148,36 @@ def _discord_report(stats: dict) -> None:
     )
 
 
+_RETRY_BACKOFF = [1800, 3600, 7200]  # 30min, 1h, 2h antes de volver al intervalo normal
+
+
 def _store_loop(store_slug: str):
-    """Loop independiente por tienda con su propio intervalo."""
+    """Loop independiente por tienda con su propio intervalo y backoff en fallos."""
     delay = STORE_STARTUP_DELAY.get(store_slug, 600)
     interval_h = STORE_SCHEDULES.get(store_slug, 24)
 
     logger.info(f"[CatalogSync] {store_slug} arrancará en {delay//60} min, luego cada {interval_h}h.")
     time.sleep(delay)
 
+    consecutive_failures = 0
     while True:
         try:
             stats = sync_store(store_slug)
             _discord_report(stats)
+            if stats["errors"] == 0:
+                consecutive_failures = 0
+            else:
+                consecutive_failures += 1
         except Exception as e:
             logger.error(f"[CatalogSync] Error inesperado en loop de {store_slug}: {e}", exc_info=True)
-        time.sleep(interval_h * 3600)
+            consecutive_failures += 1
+
+        if consecutive_failures > 0:
+            backoff = _RETRY_BACKOFF[min(consecutive_failures - 1, len(_RETRY_BACKOFF) - 1)]
+            logger.warning(f"[CatalogSync] {store_slug} — fallo #{consecutive_failures}, reintentando en {backoff//60} min.")
+            time.sleep(backoff)
+        else:
+            time.sleep(interval_h * 3600)
 
 
 def start_catalog_sync_scheduler():

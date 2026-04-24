@@ -38,7 +38,7 @@ router = APIRouter(
 
 # ── Caché de búsquedas en memoria ─────────────────────────────────────────────
 # Evita golpear la BD en búsquedas repetidas dentro de la ventana TTL.
-_SEARCH_CACHE_TTL = 30  # segundos
+_SEARCH_CACHE_TTL = 300  # segundos
 _search_cache: dict[str, tuple[float, object]] = {}  # {cache_key: (timestamp, result)}
 _search_cache_lock = threading.Lock()
 
