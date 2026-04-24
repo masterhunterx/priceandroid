@@ -357,11 +357,16 @@ async def on_message(message):
                 if status in (200, 201) and new_id:
                     ready = _vercel_wait_ready(new_id)
                     if ready:
-                        await message.channel.send(
-                            f"🔴 Frontend **desactivado**. Página de mantenimiento activa.\n"
-                            f"`!frontend on` para restaurar (deploy anterior: `{prev_id[:16]}`)"
-                        )
-                        logger.info(f"[KAIROS BOT] Frontend desactivado. Deploy mantenimiento: {new_id}")
+                        # Promover a producción (sin esto aliasAssigned=false → 404)
+                        promote_status = _vercel_promote(new_id)
+                        if promote_status in (200, 201, 204):
+                            await message.channel.send(
+                                f"🔴 Frontend **desactivado**. Página de mantenimiento activa.\n"
+                                f"`!frontend on` para restaurar (deploy anterior: `{prev_id[:16]}`)"
+                            )
+                            logger.info(f"[KAIROS BOT] Frontend desactivado. Deploy mantenimiento: {new_id}")
+                        else:
+                            await message.channel.send(f"⚠️ Deploy listo pero promote falló (HTTP {promote_status}). Promueve manualmente en Vercel: `{new_id[:16]}`")
                     else:
                         await message.channel.send(f"⚠️ Deploy creado (`{new_id[:16]}`) pero tardó demasiado en estar listo. Verifica en Vercel.")
                 else:
