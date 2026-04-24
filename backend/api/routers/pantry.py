@@ -21,24 +21,27 @@ router = APIRouter(
 UTC = timezone.utc
 
 @router.get("/", response_model=UnifiedResponse)
-def get_pantry():
+def get_pantry(current_user: str = Depends(get_api_key)):
+    user_id = current_user or "default_user"
     with get_session() as session:
-        items = session.query(PantryItem).filter(PantryItem.is_active == True).all()
-        
+        items = (
+            session.query(PantryItem)
+            .filter(PantryItem.user_id == user_id, PantryItem.is_active == True)
+            .all()
+        )
+
         result = []
         for item in items:
             product = item.product
-            # calculate days remaining
             days_remaining = None
             if item.estimated_depletion_at:
-                # Ensure datetime objects are timezone-aware in UTC before subtracting
                 now = datetime.now(UTC)
                 target = item.estimated_depletion_at
                 if target.tzinfo is None:
                     target = target.replace(tzinfo=UTC)
                 diff = (target - now).days
                 days_remaining = max(0, diff)
-                
+
             result.append(PantryItemOut(
                 id=item.id,
                 product_id=item.product_id,
@@ -50,22 +53,27 @@ def get_pantry():
                 estimated_depletion_at=item.estimated_depletion_at.isoformat() if item.estimated_depletion_at else None,
                 days_remaining=days_remaining
             ))
-            
+
         return UnifiedResponse(data=result)
 
+
 @router.post("/purchase", response_model=UnifiedResponse)
-def buy_pantry_items(purchases: List[PantryPurchaseRequest]):
+def buy_pantry_items(purchases: List[PantryPurchaseRequest], current_user: str = Depends(get_api_key)):
+    user_id = current_user or "default_user"
     with get_session() as session:
         now = datetime.now(UTC)
         for p in purchases:
-            # Validar que el producto exista antes de crear el item de despensa
             if not session.get(Product, p.product_id):
                 raise HTTPException(
                     status_code=404,
                     detail=f"Producto {p.product_id} no encontrado"
                 )
-            item = session.query(PantryItem).filter(PantryItem.product_id == p.product_id).first()
-            
+            item = (
+                session.query(PantryItem)
+                .filter(PantryItem.product_id == p.product_id, PantryItem.user_id == user_id)
+                .first()
+            )
+
             if item:
                 item.purchase_count += 1
                 if item.last_purchased_at:
@@ -75,7 +83,7 @@ def buy_pantry_items(purchases: List[PantryPurchaseRequest]):
                     days_since_last = (now - last_at).days
                     if days_since_last > 0:
                         item.average_days_between_purchases = (item.average_days_between_purchases + days_since_last) / 2.0
-                
+
                 item.last_purchased_at = now
                 item.current_stock_level = p.stock_level
                 item.is_active = True
@@ -83,6 +91,7 @@ def buy_pantry_items(purchases: List[PantryPurchaseRequest]):
             else:
                 new_item = PantryItem(
                     product_id=p.product_id,
+                    user_id=user_id,
                     last_purchased_at=now,
                     purchase_count=1,
                     average_days_between_purchases=14.0,
@@ -94,29 +103,34 @@ def buy_pantry_items(purchases: List[PantryPurchaseRequest]):
 
         try:
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
-            raise HTTPException(status_code=500, detail=f"Error al guardar en despensa: {e}")
+            raise HTTPException(status_code=500, detail="Error al guardar en despensa.")
         return UnifiedResponse(data={"message": "Pantry updated successfully"})
 
+
 @router.post("/{item_id}/consume", response_model=UnifiedResponse)
-def consume_pantry_item(item_id: int):
+def consume_pantry_item(item_id: int, current_user: str = Depends(get_api_key)):
+    user_id = current_user or "default_user"
     with get_session() as session:
-        item = session.query(PantryItem).filter(PantryItem.id == item_id).first()
+        item = (
+            session.query(PantryItem)
+            .filter(PantryItem.id == item_id, PantryItem.user_id == user_id)
+            .first()
+        )
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
-            
+
         if item.current_stock_level == "full":
             item.current_stock_level = "medium"
         elif item.current_stock_level == "medium":
             item.current_stock_level = "low"
         elif item.current_stock_level == "low":
             item.current_stock_level = "empty"
-            # Optional: when empty, trigger an immediate notification or sync if needed
-            
+
         try:
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
-            raise HTTPException(status_code=500, detail=f"Error al actualizar stock: {e}")
+            raise HTTPException(status_code=500, detail="Error al actualizar stock.")
         return UnifiedResponse(data={"message": f"Stock level updated to {item.current_stock_level}"})

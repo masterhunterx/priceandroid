@@ -278,6 +278,15 @@ export async function chatAssistant(messages: {role: string, content: string}[])
   return json.data;
 }
 
+export async function getDealsMenu(persons: number = 2): Promise<any> {
+  const resp = await fetchWithAuth(`${API_BASE_URL}/assistant/deals-menu?persons=${persons}`, {
+    headers: getHeaders(),
+  });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || 'Failed to generate deals menu');
+  return json.data;
+}
+
 // ── Sugerencias y tendencias ───────────────────────────────────────────────────
 
 export async function getSearchSuggestions(q: string): Promise<SearchSuggestion[]> {

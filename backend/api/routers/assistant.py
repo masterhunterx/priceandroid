@@ -4,11 +4,11 @@ import time
 import logging
 from collections import defaultdict
 from threading import Lock
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Query, HTTPException, Depends, Request
 from core.db import get_session
-from core.models import Product, UserPreference, Notification, UserAssistantState, Price
+from core.models import Product, StoreProduct, Store, UserPreference, Notification, UserAssistantState, Price
 from ..schemas import UnifiedResponse, NotificationOut, ChatRequest, OptimizeCartRequest
 from ..middleware import get_api_key
 from core.ai_service import KairosAIService
@@ -257,6 +257,164 @@ def clear_chat_history(current_user: str = Depends(get_api_key)):
         state.chat_history_json = "[]"
         session.commit()
         return UnifiedResponse(data={"message": "Historial borrado. ¡Empecemos de nuevo!"})
+
+
+# ── Deals Menu helpers ────────────────────────────────────────────────────────
+
+_FOOD_CATEGORIES = {
+    "protein":    ["pollo", "carne", "cerdo", "vacuno", "filete", "pescado", "salmon", "atun", "atún", "pavo", "cordero", "plateada", "asado", "costilla"],
+    "carbs":      ["arroz", "fideos", "pasta", "spaghetti", "talarin", "macarron", "quinoa", "lenteja"],
+    "dairy":      ["leche", "yogurt", "queso", "mantequilla", "crema"],
+    "vegetables": ["tomate", "lechuga", "zanahoria", "brocoli", "espinaca", "zapallo", "pimiento", "pepino", "betarraga", "apio"],
+    "eggs":       ["huevo"],
+    "legumes":    ["poroto", "garbanzo", "arveja"],
+}
+
+_CAT_BASE_QTY = {"protein": 1, "carbs": 2, "dairy": 2, "vegetables": 1, "eggs": 1, "legumes": 1}
+
+
+def _qty_for_cat(cat: str, persons: int) -> int:
+    base = _CAT_BASE_QTY.get(cat, 1)
+    if persons <= 2:
+        return base
+    return max(1, round(base * persons / 2))
+
+
+def _base_staples(found_cats: set, persons: int) -> list:
+    staples = [
+        {"query": "aceite vegetal 1 litro", "qty": 1},
+        {"query": "cebolla", "qty": max(1, persons // 2)},
+        {"query": "ajo", "qty": 1},
+    ]
+    if "eggs" not in found_cats:
+        staples.append({"query": "huevos blancos docena", "qty": 1})
+    if "carbs" not in found_cats:
+        staples.append({"query": "arroz 1 kilo", "qty": max(1, round(persons / 2))})
+        staples.append({"query": "fideos espiral 500g", "qty": max(1, persons)})
+    if "protein" not in found_cats:
+        staples.append({"query": "pollo trozado 1 kilo", "qty": max(1, round(persons / 2))})
+    return staples
+
+
+@router.get("/deals-menu", response_model=UnifiedResponse)
+def deals_menu_endpoint(
+    persons: int = Query(2, ge=1, le=10, description="Número de personas"),
+    current_user: str = Depends(get_api_key),
+):
+    """
+    KAIROS Deals Menu: genera un menú semanal construido alrededor de las mejores
+    ofertas activas de hoy, en lugar del flujo inverso (presupuesto → menú).
+    """
+    with get_session() as session:
+        cutoff = datetime.now(UTC) - timedelta(hours=48)
+
+        rows = (
+            session.query(StoreProduct, Price, Store)
+            .join(Price, Price.store_product_id == StoreProduct.id)
+            .join(Store, Store.id == StoreProduct.store_id)
+            .filter(
+                Price.has_discount == True,
+                Price.scraped_at >= cutoff,
+                StoreProduct.in_stock == True,
+            )
+            .order_by(Price.scraped_at.desc())
+            .limit(300)
+            .all()
+        )
+
+        # Deduplicar y clasificar
+        seen: set = set()
+        cat_deals: dict = {cat: [] for cat in _FOOD_CATEGORIES}
+
+        for sp, price, store in rows:
+            if sp.id in seen:
+                continue
+            seen.add(sp.id)
+
+            name_lower = sp.name.lower()
+            matched_cat = next(
+                (cat for cat, kws in _FOOD_CATEGORIES.items() if any(kw in name_lower for kw in kws)),
+                None,
+            )
+            if not matched_cat:
+                continue
+
+            discount_pct = None
+            if price.list_price and price.price and price.list_price > price.price:
+                discount_pct = round((1 - price.price / price.list_price) * 100, 1)
+            discount_pct = discount_pct or price.discount_percent
+
+            savings = price.savings_amount
+            if not savings and price.list_price and price.price:
+                savings = round(price.list_price - price.price, 0)
+
+            cat_deals[matched_cat].append({
+                "sp_id":            sp.id,
+                "name":             sp.name,
+                "store":            store.name,
+                "store_slug":       store.slug,
+                "price":            price.price,
+                "list_price":       price.list_price,
+                "savings_amount":   savings,
+                "discount_percent": discount_pct,
+                "image_url":        sp.image_url or "",
+            })
+
+        # Seleccionar top deal por categoría (mayor descuento)
+        MAX_PER_CAT = {"protein": 1, "carbs": 1, "dairy": 2, "vegetables": 2, "eggs": 1, "legumes": 1}
+        ingredients: list = []
+        deals_highlight: list = []
+        found_cats: set = set()
+
+        for cat in ["protein", "carbs", "dairy", "vegetables", "eggs", "legumes"]:
+            sorted_deals = sorted(
+                cat_deals[cat],
+                key=lambda d: d["discount_percent"] or 0,
+                reverse=True,
+            )
+            for deal in sorted_deals[:MAX_PER_CAT[cat]]:
+                qty = _qty_for_cat(cat, persons)
+                ingredients.append({"query": deal["name"], "qty": qty})
+                deals_highlight.append({**deal, "category": cat, "qty": qty})
+                found_cats.add(cat)
+
+        # Ingredientes base siempre necesarios
+        ingredients.extend(_base_staples(found_cats, persons))
+
+        # Fallback si no hay ninguna oferta en BD
+        if not ingredients:
+            from core.ai_service import _MENUS
+            base = _MENUS["medium"]["menu"]["ingredients"]
+            ingredients = [{"query": i["query"], "qty": max(1, round(i["qty"] * persons))} for i in base]
+
+        plan_title = f"Menú de Ofertas · {persons} persona{'s' if persons > 1 else ''}"
+        meal_plans = generate_per_store_plans(session, ingredients, plan_title)
+
+        total_savings = sum(
+            (d["savings_amount"] or 0) * d["qty"]
+            for d in deals_highlight
+            if d.get("savings_amount")
+        )
+
+        if deals_highlight:
+            top = max(deals_highlight, key=lambda d: d["discount_percent"] or 0)
+            pct = top["discount_percent"]
+            reply = (
+                f"¡Armé tu menú alrededor de {len(deals_highlight)} ofertas de hoy! "
+                f"Lo mejor: {top['name'][:35]} con {pct:.0f}% off en {top['store']}. "
+                + (f"Ahorras ~${total_savings:,.0f} CLP vs. precio normal." if total_savings > 0 else "")
+            ).strip()
+        else:
+            reply = "No hay ofertas activas en este momento. Te armo un menú económico estándar."
+
+        return UnifiedResponse(data={
+            "reply":             reply,
+            "meal_plans":        meal_plans,
+            "deals_highlight":   deals_highlight,
+            "total_deals_found": len(deals_highlight),
+            "estimated_savings": round(total_savings),
+            "persons":           persons,
+        })
 
 
 @router.post("/chat", response_model=UnifiedResponse)

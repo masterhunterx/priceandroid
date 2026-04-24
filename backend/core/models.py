@@ -436,17 +436,18 @@ class PantryItem(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    
+    user_id = Column(String(100), default="default_user")
+
     last_purchased_at = Column(DateTime, default=lambda: datetime.now(UTC))
     purchase_count = Column(Integer, default=1)
-    
+
     # Analytics for KAIROS
     average_days_between_purchases = Column(Float, default=14.0)
     estimated_depletion_at = Column(DateTime, nullable=True)
-    
+
     # User status overrides
-    is_active = Column(Boolean, default=True) # If false, user stopped tracking this
-    current_stock_level = Column(String(20), default="full") # "full", "medium", "low", "empty"
+    is_active = Column(Boolean, default=True)
+    current_stock_level = Column(String(20), default="full")  # "full", "medium", "low", "empty"
 
     product = relationship("Product")
 

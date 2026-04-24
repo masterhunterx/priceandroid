@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { chatAssistant, getAssistantState, formatCurrency } from '../lib/api';
+import { chatAssistant, getAssistantState, getDealsMenu, formatCurrency } from '../lib/api';
 import { toast } from 'react-hot-toast';
 import { useCart } from '../context/CartContext';
 
@@ -32,10 +32,25 @@ interface AssistantState {
   persons: number;
 }
 
+interface DealHighlight {
+  name: string;
+  store: string;
+  store_slug: string;
+  price: number;
+  list_price: number | null;
+  discount_percent: number | null;
+  savings_amount: number | null;
+  image_url: string;
+  category: string;
+  qty: number;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   mealPlans?: MealPlanStore[];
+  dealsHighlight?: DealHighlight[];
+  estimatedSavings?: number;
 }
 
 // Quick-reply chip options
@@ -236,6 +251,48 @@ const StorePlanCard: React.FC<{
   );
 };
 
+// ── Deals highlight strip ─────────────────────────────────────────────────────
+const CAT_EMOJI: Record<string, string> = {
+  protein: '🥩', carbs: '🍚', dairy: '🥛', vegetables: '🥦', eggs: '🥚', legumes: '🫘',
+};
+
+const DealsHighlightBar: React.FC<{ deals: DealHighlight[]; savings: number }> = ({ deals, savings }) => {
+  if (!deals || deals.length === 0) return null;
+  return (
+    <div className="mt-3 space-y-2">
+      {savings > 0 && (
+        <div className="flex items-center gap-1.5 text-[10px] font-black text-primary">
+          <span className="material-symbols-outlined text-sm">local_fire_department</span>
+          Menú construido con ofertas de hoy · ahorras ~{formatCurrency(savings)} vs. precio normal
+        </div>
+      )}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        {deals.map((d, i) => (
+          <div
+            key={i}
+            className="shrink-0 flex flex-col gap-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl p-2.5 w-[130px]"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-base">{CAT_EMOJI[d.category] ?? '🛒'}</span>
+              {d.discount_percent != null && (
+                <span className="text-[9px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-full">
+                  -{Math.round(d.discount_percent)}%
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] font-bold text-slate-800 dark:text-white leading-tight line-clamp-2">{d.name}</p>
+            <p className="text-[9px] text-slate-500">{d.store}</p>
+            <p className="text-xs font-black text-primary">{formatCurrency(d.price)}</p>
+            {d.list_price && d.list_price > d.price && (
+              <p className="text-[9px] text-slate-400 line-through">{formatCurrency(d.list_price)}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ── Meal plans horizontal scroll ──────────────────────────────────────────────
 const MealPlanScroll: React.FC<{
   plans: MealPlanStore[];
@@ -386,6 +443,30 @@ const ShoppingAssistant: React.FC = () => {
   const handleSend = () => sendMessage(input);
   const handleChip = (value: string) => sendMessage(value);
 
+  const handleDealsMenu = async () => {
+    if (isLoading) return;
+    setShowChips(false);
+    const persons = state?.persons ?? 2;
+    const userMsg: Message = { role: 'user', content: `🔥 Generar menú con las ofertas de hoy (${persons} persona${persons > 1 ? 's' : ''})` };
+    setMessages(prev => [...prev, userMsg]);
+    setIsLoading(true);
+    try {
+      const data = await getDealsMenu(persons);
+      const assistantMsg: Message = {
+        role: 'assistant',
+        content: data.reply || 'Menú de ofertas generado.',
+        mealPlans: data.meal_plans,
+        dealsHighlight: data.deals_highlight,
+        estimatedSavings: data.estimated_savings,
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (err: any) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Error al obtener ofertas: ${err?.message ?? 'Error desconocido'}` }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Chips to show: budget chips if no budget, context chips if has budget
   const chips = state?.budget ? CONTEXT_CHIPS : BUDGET_CHIPS;
 
@@ -422,6 +503,16 @@ const ShoppingAssistant: React.FC = () => {
             </span>
           </div>
         )}
+        {/* Deals Menu shortcut */}
+        <button
+          onClick={handleDealsMenu}
+          disabled={isLoading}
+          title="Menú de Hoy — construido con las mejores ofertas activas"
+          className="shrink-0 flex items-center gap-1 bg-amber-400/20 border border-amber-400/40 text-amber-600 dark:text-amber-400 rounded-full px-2.5 py-1.5 text-[11px] font-black active:scale-95 transition-all disabled:opacity-40"
+        >
+          <span className="text-sm">🔥</span>
+          Hoy
+        </button>
       </header>
 
       {/* Store comparison legend */}
@@ -455,6 +546,11 @@ const ShoppingAssistant: React.FC = () => {
                   {line}
                 </p>
               ))}
+
+              {/* Today's deals strip */}
+              {m.dealsHighlight && m.dealsHighlight.length > 0 && (
+                <DealsHighlightBar deals={m.dealsHighlight} savings={m.estimatedSavings ?? 0} />
+              )}
 
               {/* Per-store meal plan cards */}
               {m.mealPlans && (
