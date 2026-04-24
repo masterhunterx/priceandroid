@@ -13,12 +13,12 @@
     { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
   ],
   "title": "FreshCart Antigravity — Monitor",
-  "uid": "freshcart-monitor-v3",
+  "uid": "freshcart-monitor-v4",
   "schemaVersion": 38,
   "refresh": "1m",
   "panels": [
-    {
-      "id": 1,
+
+    { "id": 1,
       "title": "Total Productos",
       "type": "stat",
       "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
@@ -27,14 +27,15 @@
         "defaults": {
           "color": { "mode": "thresholds" },
           "thresholds": { "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "0"
         }
       },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "freshcart_products_total", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+      "targets": [{ "expr": "freshcart_products_total", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 2,
+
+    { "id": 2,
       "title": "Sin Sincronizar (>48h)",
       "type": "stat",
       "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
@@ -45,18 +46,19 @@
           "thresholds": {
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 1000 },
-              { "color": "red", "value": 5000 }
+              { "color": "yellow", "value": 500 },
+              { "color": "red",    "value": 2000 }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "0"
         }
       },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "freshcart_products_stale_total", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+      "targets": [{ "expr": "freshcart_products_stale_total", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 3,
+
+    { "id": 3,
       "title": "Sin Stock",
       "type": "stat",
       "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
@@ -65,52 +67,62 @@
         "defaults": {
           "color": { "mode": "thresholds" },
           "thresholds": { "steps": [{ "color": "blue", "value": null }] },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "0"
         }
       },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "freshcart_products_out_of_stock_total", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+      "targets": [{ "expr": "freshcart_products_out_of_stock_total", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 10,
-      "title": "Usuarios Activos Ahora",
+
+    { "id": 17,
+      "title": "Sin Ficha Canónica",
+      "description": "Productos con product_id=NULL — invisibles en comparación cruzada",
       "type": "stat",
       "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "options": { "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red",    "value": 500 }
+            ]
+          },
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "freshcart_products_unmatched_total", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+    },
+
+    { "id": 10,
+      "title": "Usuarios Activos",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
       "options": { "colorMode": "value", "graphMode": "none", "textMode": "auto" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
           "thresholds": {
             "steps": [
-              { "color": "green", "value": null },
+              { "color": "green",  "value": null },
               { "color": "yellow", "value": 3 },
-              { "color": "red", "value": 5 }
+              { "color": "red",    "value": 10 }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "0"
         }
       },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "freshcart_users_active_total", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+      "targets": [{ "expr": "freshcart_users_active_total", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 11,
-      "title": "Total Logins (acumulado)",
-      "type": "stat",
-      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
-      "options": { "colorMode": "value", "graphMode": "area", "textMode": "auto" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "steps": [{ "color": "purple", "value": null }] },
-          "unit": "short"
-        }
-      },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "sum(freshcart_user_logins_total)", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
-    },
-    {
-      "id": 4,
+
+    { "id": 4,
       "title": "Feedback Pendiente",
       "type": "stat",
       "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
@@ -120,120 +132,220 @@
           "color": { "mode": "thresholds" },
           "thresholds": {
             "steps": [
-              { "color": "green", "value": null },
+              { "color": "green",  "value": null },
               { "color": "orange", "value": 1 }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "noValue": "0"
         }
       },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "sum(freshcart_feedback_total{status=\"pending\"})", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+      "targets": [{ "expr": "sum(freshcart_feedback_total{status=\"pending\"}) or vector(0)", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 12,
+
+    { "id": 5,
+      "title": "Syncs Exitosas por Tienda (últimas 6h)",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 6 },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "increase(freshcart_sync_operations_total{result=\"success\"}[6h])", "legendFormat": "{{store}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+    },
+
+    { "id": 6,
+      "title": "Syncs Fallidas por Tienda (últimas 6h)",
+      "type": "bargauge",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 6 },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "increase(freshcart_sync_operations_total{result!=\"success\"}[6h])", "legendFormat": "{{store}} ({{result}})", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+    },
+
+    { "id": 7,
+      "title": "Actualizaciones de Precio por Tienda",
+      "description": "Precios nuevos grabados por hora. Vacío = sin cambios de precio en el período (normal fuera de ciclos de sync).",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 10, "w": 24, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "noValue": "0"
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "increase(freshcart_price_updates_total[$__rate_interval])",
+          "legendFormat": "{{store}}",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+
+    { "id": 18,
+      "title": "Errores de Scraper Acumulados",
+      "description": "Total de errores por tienda desde el último reinicio. Lider normalmente tiene más por PerimeterX.",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 6 },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "semi-dark-orange" },
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "freshcart_scraper_errors_total", "legendFormat": "{{store}} — {{error_type}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+    },
+
+    { "id": 19,
+      "title": "Requests Bloqueadas (WAF)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "unit": "short",
+          "custom": { "lineWidth": 2 },
+          "noValue": "0"
+        }
+      },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "rate(freshcart_api_blocked_requests_total[5m]) * 300", "legendFormat": "{{reason}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+    },
+
+    { "id": 12,
       "title": "Logins por Usuario (últimas 24h)",
       "type": "bargauge",
-      "gridPos": { "x": 0, "y": 4, "w": 8, "h": 6 },
+      "gridPos": { "x": 0, "y": 24, "w": 8, "h": 6 },
       "options": { "orientation": "horizontal", "displayMode": "gradient" },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" } },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [{ "expr": "increase(freshcart_user_logins_total[24h])", "legendFormat": "{{username}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 13,
+
+    { "id": 13,
       "title": "Búsquedas por Usuario (últimas 24h)",
       "type": "bargauge",
-      "gridPos": { "x": 8, "y": 4, "w": 8, "h": 6 },
+      "gridPos": { "x": 8, "y": 24, "w": 8, "h": 6 },
       "options": { "orientation": "horizontal", "displayMode": "gradient" },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" } },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [{ "expr": "increase(freshcart_user_searches_total[24h])", "legendFormat": "{{username}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 14,
+
+    { "id": 14,
       "title": "Duración Media de Sesión",
       "type": "stat",
-      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 6 },
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 6 },
       "options": { "colorMode": "value", "graphMode": "none", "textMode": "auto" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
           "thresholds": { "steps": [{ "color": "blue", "value": null }] },
-          "unit": "s"
+          "unit": "s",
+          "noValue": "—"
         }
       },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [{ "expr": "rate(freshcart_user_session_duration_seconds_sum[1h]) / rate(freshcart_user_session_duration_seconds_count[1h])", "legendFormat": "Promedio", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 5,
-      "title": "Syncs Exitosas por Tienda (últimas 6h)",
-      "type": "bargauge",
-      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 6 },
-      "options": { "orientation": "horizontal", "displayMode": "gradient" },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" } },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "increase(freshcart_sync_operations_total{result=\"success\"}[6h])", "legendFormat": "{{store}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
-    },
-    {
-      "id": 6,
-      "title": "Syncs Fallidas por Tienda (últimas 6h)",
-      "type": "bargauge",
-      "gridPos": { "x": 12, "y": 10, "w": 12, "h": 6 },
-      "options": { "orientation": "horizontal", "displayMode": "gradient" },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "red" }, "unit": "short" } },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "increase(freshcart_sync_operations_total{result!=\"success\"}[6h])", "legendFormat": "{{store}} ({{result}})", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
-    },
-    {
-      "id": 15,
+
+    { "id": 15,
       "title": "Actividad de Usuarios en el Tiempo",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 16, "w": 14, "h": 8 },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "lineWidth": 2 } } },
+      "gridPos": { "x": 0, "y": 30, "w": 14, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "custom": { "lineWidth": 2 },
+          "noValue": "0"
+        }
+      },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
         { "expr": "freshcart_users_active_total", "legendFormat": "Activos ahora", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } },
         { "expr": "rate(freshcart_user_logins_total[5m]) * 300", "legendFormat": "Logins / 5m", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }
       ]
     },
-    {
-      "id": 16,
+
+    { "id": 16,
       "title": "Feedback por Tipo y Estado",
       "type": "bargauge",
-      "gridPos": { "x": 14, "y": 16, "w": 10, "h": 8 },
+      "gridPos": { "x": 14, "y": 30, "w": 10, "h": 8 },
       "options": { "orientation": "horizontal", "displayMode": "gradient" },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" } },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "noValue": "0"
+        }
+      },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [{ "expr": "sum by (type, status) (freshcart_feedback_total)", "legendFormat": "{{type}} ({{status}})", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 7,
-      "title": "Actualizaciones de Precio en el Tiempo",
-      "type": "timeseries",
-      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "lineWidth": 2 } } },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [{ "expr": "rate(freshcart_price_updates_total[5m]) * 300", "legendFormat": "{{store}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
-    },
-    {
-      "id": 8,
+
+    { "id": 8,
       "title": "Memoria del Proceso",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 6 },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "purple" }, "unit": "decbytes" } },
+      "gridPos": { "x": 0, "y": 38, "w": 12, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "purple" },
+          "unit": "decbytes",
+          "custom": { "lineWidth": 2 }
+        }
+      },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [{ "expr": "process_resident_memory_bytes", "legendFormat": "RAM usada", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     },
-    {
-      "id": 9,
+
+    { "id": 9,
       "title": "CPU del Proceso",
       "type": "timeseries",
-      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 6 },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "orange" }, "unit": "percentunit" } },
+      "gridPos": { "x": 12, "y": 38, "w": 12, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "orange" },
+          "unit": "percentunit",
+          "custom": { "lineWidth": 2 }
+        }
+      },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [{ "expr": "rate(process_cpu_seconds_total[1m])", "legendFormat": "CPU %", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
     }
+
   ]
 }
