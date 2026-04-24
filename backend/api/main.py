@@ -114,6 +114,20 @@ def start_background_agents():
         threading.Thread(target=match_pipeline_loop, name="MatchPipeline", daemon=True).start()
         logger.info("[MatchPipeline] Pipeline de emparejamiento canónico inicializado.")
 
+    if not _is_running("MetricsRefresher"):
+        def _metrics_loop():
+            import time as _time
+            while True:
+                _time.sleep(900)  # cada 15 min
+                try:
+                    from core.metrics import refresh_catalog_gauges, refresh_feedback_gauges
+                    refresh_catalog_gauges()
+                    refresh_feedback_gauges()
+                except Exception as _e:
+                    logger.warning(f"[Metrics] Error al refrescar gauges: {_e}")
+        threading.Thread(target=_metrics_loop, name="MetricsRefresher", daemon=True).start()
+        logger.info("[Metrics] Refresco periódico de gauges inicializado (cada 15 min).")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

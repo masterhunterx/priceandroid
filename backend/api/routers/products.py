@@ -71,6 +71,7 @@ def search_products(
     q: str = Query("", description="Término de búsqueda"),
     store: Optional[str] = Query(None, description="Filtrar por slug de tienda"),
     category: Optional[str] = Query(None, description="Filtrar por categoría"),
+    in_stock: Optional[bool] = Query(True, description="Solo productos en stock (False para ver todos)"),
     sort: str = Query("price_asc", description="Ordenar: price_asc, price_desc, name"),
     page: int = Query(1, ge=1, description="Página"),
     page_size: int = Query(20, ge=1, le=100, description="Resultados por página"),
@@ -136,6 +137,9 @@ def search_products(
                 (func.lower(StoreProduct.brand).like(term_resilient, escape='\\'))
             )
         
+        if in_stock is not None:
+            main_query = main_query.filter(StoreProduct.in_stock == in_stock)
+
         if category:
             cat_esc = category.lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
             main_query = main_query.filter(

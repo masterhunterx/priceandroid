@@ -89,7 +89,8 @@ async def get_api_key(request: Request, api_key: str = Security(api_key_header))
             logger.critical(f"[SECURITY] IP {client_ip} bloqueada por brute force de API key")
         raise HTTPException(status_code=403, detail="Credenciales inválidas.")
 
-    return api_key
+    # API key es acceso de herramienta/CLI — se trata como usuario genérico
+    return "default_user"
 
 
 def _is_private_ip(ip: str) -> bool:

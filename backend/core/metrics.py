@@ -27,6 +27,10 @@ products_never_synced = Gauge(
     "freshcart_products_never_synced_total",
     "Productos que nunca han sido sincronizados"
 )
+products_unmatched = Gauge(
+    "freshcart_products_unmatched_total",
+    "Productos sin ficha canónica (product_id=NULL, invisibles en la app)"
+)
 
 # ── Actividad de sincronización ────────────────────────────────────────────────
 sync_operations_total = Counter(
@@ -120,11 +124,15 @@ def refresh_catalog_gauges():
             never = session.query(func.count(StoreProduct.id)).filter(
                 StoreProduct.last_sync == None
             ).scalar() or 0
+            unmatched = session.query(func.count(StoreProduct.id)).filter(
+                StoreProduct.product_id == None
+            ).scalar() or 0
 
         products_total.set(total)
         products_out_of_stock.set(oos)
         products_stale.set(stale)
         products_never_synced.set(never)
+        products_unmatched.set(unmatched)
 
     except Exception:
         pass  # No interrumpir el servidor si falla la métrica

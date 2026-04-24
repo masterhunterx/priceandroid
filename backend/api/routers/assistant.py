@@ -69,13 +69,15 @@ def optimize_cart_endpoint(req: OptimizeCartRequest):
 def get_favorites(
     limit: int = Query(50, ge=1, le=200, description="Máximo de favoritos a retornar"),
     offset: int = Query(0, ge=0, description="Desplazamiento para paginación"),
+    current_user: str = Depends(get_api_key),
 ):
     """
     Listar productos marcados como favoritos.
     Soporta paginación para evitar cargas masivas con limit/offset.
     """
+    user_id = current_user or "default_user"
     with get_session() as session:
-        favorites = session.query(UserPreference).offset(offset).limit(limit).all()
+        favorites = session.query(UserPreference).filter_by(user_id=user_id).offset(offset).limit(limit).all()
         product_ids = [fav.product_id for fav in favorites]
         
         if not product_ids:
@@ -100,25 +102,23 @@ def get_favorites(
 
 
 @router.post("/favorites", response_model=UnifiedResponse)
-def toggle_favorite(data: FavoriteAction):
+def toggle_favorite(data: FavoriteAction, current_user: str = Depends(get_api_key)):
     """Alternar el estado de favorito de un producto (agregar, eliminar o toggle)."""
+    user_id = current_user or "default_user"
     with get_session() as session:
         product = session.get(Product, data.product_id)
         if not product:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-        pref = session.query(UserPreference).filter_by(product_id=data.product_id).first()
+        pref = session.query(UserPreference).filter_by(product_id=data.product_id, user_id=user_id).first()
 
-        # 'toggle': flip the current state
-        # 'remove': explicit remove
-        # anything else (e.g. 'add'): explicit add
         if data.action == "toggle":
             if pref:
                 session.delete(pref)
                 msg = "Eliminado de favoritos"
                 status = False
             else:
-                session.add(UserPreference(product_id=data.product_id))
+                session.add(UserPreference(product_id=data.product_id, user_id=user_id))
                 msg = "Agregado a favoritos"
                 status = True
         elif data.action == "remove":
@@ -128,7 +128,7 @@ def toggle_favorite(data: FavoriteAction):
             status = False
         else:  # 'add'
             if not pref:
-                session.add(UserPreference(product_id=data.product_id))
+                session.add(UserPreference(product_id=data.product_id, user_id=user_id))
             msg = "Agregado a favoritos"
             status = True
 
@@ -140,13 +140,15 @@ def toggle_favorite(data: FavoriteAction):
 def get_notifications(
     limit: int = Query(50, ge=1, le=100, description="Máximo de notificaciones"),
     unread_only: bool = Query(False, description="Solo no leídas"),
+    current_user: str = Depends(get_api_key),
 ):
     """Obtener notificaciones generadas por KAIROS."""
+    user_id = current_user or "default_user"
     with get_session() as session:
-        query = session.query(Notification)
+        query = session.query(Notification).filter(Notification.user_id == user_id)
         if unread_only:
-            query = query.filter_by(is_read=False)
-        
+            query = query.filter(Notification.is_read == False)
+
         notifs = query.order_by(Notification.created_at.desc()).limit(limit).all()
         return UnifiedResponse(data=[
             NotificationOut(
@@ -187,10 +189,14 @@ def delete_notification(notification_id: int):
 
 
 @router.delete("/notifications", response_model=UnifiedResponse)
-def clear_read_notifications():
-    """Eliminar todas las notificaciones ya leídas."""
+def clear_read_notifications(current_user: str = Depends(get_api_key)):
+    """Eliminar todas las notificaciones ya leídas del usuario actual."""
+    user_id = current_user or "default_user"
     with get_session() as session:
-        read_notifs = session.query(Notification).filter(Notification.is_read == True).all()
+        read_notifs = session.query(Notification).filter(
+            Notification.user_id == user_id,
+            Notification.is_read == True,
+        ).all()
         count = len(read_notifs)
         for n in read_notifs:
             session.delete(n)
