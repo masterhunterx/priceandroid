@@ -24,14 +24,20 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
+      - name: Install Playwright browsers
+        working-directory: backend
+        run: python -m playwright install chromium --with-deps
+
       - name: Run unit tests (no network)
         working-directory: backend
         env:
-          DATABASE_URL: sqlite:///./test.db
-          API_KEY: test-key
+          DATABASE_URL: sqlite:///./test_ci.db
+          API_KEY: test-key-ci
           ENVIRONMENT: development
+          DISCORD_WEBHOOK_URL: ""
+          DISCORD_BOT_TOKEN: ""
         run: |
-          python -m pytest tests/test_matcher.py tests/test_security_and_validation.py -v --tb=short
+          python -m pytest tests/test_matcher.py tests/test_security_and_validation.py tests/test_api_integration.py -v --tb=short
 
   frontend-build:
     name: Frontend Build

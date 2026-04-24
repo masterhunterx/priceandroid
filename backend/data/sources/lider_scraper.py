@@ -150,11 +150,81 @@ SINGLE_PRODUCT_QUERY = """query Product($id: String!, $prg: Prg!) {
 
 import random as _random
 import re as _re
+from threading import Lock as _Lock
+import logging as _logging
+_logger = _logging.getLogger("AntigravityAPI")
 
 # Fingerprints rotativos — PerimeterX detecta versiones fijas con el tiempo
 _FINGERPRINTS = ["chrome136", "chrome133a", "chrome131", "chrome124", "chrome120", "chrome116"]
 
-def create_session():
+# ---------------------------------------------------------------------------
+# Playwright cookie harvest — fallback cuando curl_cffi es bloqueado por PX
+# ---------------------------------------------------------------------------
+
+_PX_CACHE: dict = {}
+_PX_EXPIRES: float = 0.0
+_PX_LOCK = _Lock()
+_PX_CACHE_TTL = 1800  # 30 min
+
+
+def _playwright_available() -> bool:
+    try:
+        import playwright  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _harvest_px_cookies() -> dict:
+    """
+    Lanza Chromium headless via Playwright para generar cookies PX válidas.
+    Cacheadas 30 min — solo se ejecuta en bloqueos reales, no en cada request.
+    """
+    global _PX_CACHE, _PX_EXPIRES
+    now = time.time()
+    with _PX_LOCK:
+        if _PX_CACHE and now < _PX_EXPIRES:
+            return _PX_CACHE
+        if not _playwright_available():
+            return {}
+        try:
+            from playwright.sync_api import sync_playwright
+            _logger.info("[Lider] Playwright: iniciando harvest de cookies PX...")
+            with sync_playwright() as p:
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                )
+                ctx = browser.new_context(
+                    user_agent=HEADERS["User-Agent"],
+                    locale="es-CL",
+                    timezone_id="America/Santiago",
+                )
+                page = ctx.new_page()
+                page.goto(
+                    "https://www.lider.cl/supermercado",
+                    wait_until="networkidle",
+                    timeout=30000,
+                )
+                time.sleep(_random.uniform(2.5, 4.0))
+                cookies = {c["name"]: c["value"] for c in ctx.cookies()}
+                browser.close()
+            _PX_CACHE = cookies
+            _PX_EXPIRES = now + _PX_CACHE_TTL
+            _logger.info(f"[Lider] Playwright harvest exitoso ({len(cookies)} cookies, válidas 30 min)")
+            return cookies
+        except Exception as e:
+            _logger.warning(f"[Lider] Playwright harvest falló: {e}")
+            return {}
+
+
+def _inject_px_cookies(session, cookies: dict) -> None:
+    """Inyecta cookies PX en una sesión curl_cffi."""
+    for name, value in cookies.items():
+        session.cookies.set(name, value, domain=".lider.cl")
+
+
+def create_session(with_px_cookies: bool = False):
     """Crea sesión curl_cffi con fingerprint Chrome aleatorio para evadir PerimeterX."""
     fp = _random.choice(_FINGERPRINTS)
     session = cffi_requests.Session(impersonate=fp)
@@ -168,6 +238,8 @@ def create_session():
         f'"Chromium";v="{version}", "Google Chrome";v="{version}", "Not-A.Brand";v="99"'
     )
     session.headers.update(headers)
+    if with_px_cookies:
+        _inject_px_cookies(session, _harvest_px_cookies())
     return session
 
 
@@ -207,9 +279,11 @@ def fetch_single_product(session, product_id, store_id=None):
             if response.status_code in (400, 403, 412, 429):
                 print(f"  [ERROR] Lider HTTP {response.status_code} para producto {product_id} (intento {attempt+1})")
                 if attempt < 2:
-                    session = create_session()
-                    _warm_session(session)
-                    time.sleep(3 + _random.uniform(2, 5))
+                    px_cookies = _harvest_px_cookies()
+                    session = create_session(with_px_cookies=bool(px_cookies))
+                    if not px_cookies:
+                        _warm_session(session)
+                    time.sleep(8 + _random.uniform(4, 12))
                     continue
                 raise ConnectionError(f"Lider HTTP {response.status_code}: scraping bloqueado")
 
@@ -278,9 +352,12 @@ def fetch_products_page(session, query, page, store_id=None):
             if response.status_code in (412, 429, 403):
                 print(f"  [ERROR] Lider HTTP {response.status_code} en búsqueda (intento {attempt+1})")
                 if attempt == 0:
-                    session = create_session()
-                    _warm_session(session)
-                    backoff = 8 + _random.uniform(4, 12)  # 12-20s: PX necesita tiempo para "olvidar"
+                    # Primer reintento: nueva sesión con cookies Playwright si disponible
+                    px_cookies = _harvest_px_cookies()
+                    session = create_session(with_px_cookies=bool(px_cookies))
+                    if not px_cookies:
+                        _warm_session(session)
+                    backoff = 8 + _random.uniform(4, 12)
                     time.sleep(backoff)
                     continue
                 return [], None

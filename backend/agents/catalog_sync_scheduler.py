@@ -48,6 +48,9 @@ STORE_STARTUP_DELAY = {
 MAX_PAGES_PER_CATEGORY = int(os.getenv("SYNC_MAX_PAGES", "3"))
 MAX_CATEGORIES         = int(os.getenv("SYNC_MAX_CATEGORIES", "15"))
 
+# Máximo 2 tiendas sincronizando simultáneamente — evita saturar la BD y los scrapers
+_SYNC_SEMAPHORE = threading.Semaphore(2)
+
 
 def _send_discord(content: str) -> None:
     if not DISCORD_WEBHOOK:
@@ -162,7 +165,8 @@ def _store_loop(store_slug: str):
     consecutive_failures = 0
     while True:
         try:
-            stats = sync_store(store_slug)
+            with _SYNC_SEMAPHORE:  # max 2 tiendas sincronizando a la vez
+                stats = sync_store(store_slug)
             _discord_report(stats)
             if stats["errors"] == 0:
                 consecutive_failures = 0

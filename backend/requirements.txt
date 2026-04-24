@@ -22,6 +22,10 @@ python-dotenv==1.1.1
 
 # Testing
 pytest==9.0.2
+httpx>=0.27.0          # TestClient async support
+
+# Playwright — fallback headless para Lider/PerimeterX
+playwright>=1.44.0
 
 # Scheduling
 schedule==1.2.2
