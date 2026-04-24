@@ -39,10 +39,10 @@ STORE_SCHEDULES = {
 
 # Arranque escalonado para no golpear todas las tiendas al mismo tiempo
 STORE_STARTUP_DELAY = {
-    "jumbo":        600,    # 10 min
-    "santa_isabel": 1800,   # 30 min
-    "lider":        3000,   # 50 min
-    "unimarc":      4200,   # 70 min
+    "jumbo":        120,    # 2 min — arranca rápido tras deploy
+    "santa_isabel": 300,    # 5 min
+    "lider":        600,    # 10 min (circuit breaker lo pausará igual si está OPEN)
+    "unimarc":      480,    # 8 min
 }
 
 MAX_PAGES_PER_CATEGORY = int(os.getenv("SYNC_MAX_PAGES", "3"))

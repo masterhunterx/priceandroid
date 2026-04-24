@@ -248,21 +248,24 @@ def _upsert_product_record(
         external_id=external_id,
     ).first()
 
+    now = datetime.now(UTC)
     if sp:
         if sp.content_hash == new_hash:
-            sp.in_stock = product_data.get("in_stock", sp.in_stock)
-            sp.last_seen = datetime.now(UTC)
+            sp.in_stock  = product_data.get("in_stock", sp.in_stock)
+            sp.last_seen = now
+            sp.last_sync = now  # bulk scrape también cuenta como sync
             return sp, False, False
-        sp.name = product_data.get("name", sp.name)
-        sp.brand = product_data.get("brand", sp.brand)
-        sp.slug = product_data.get("slug", sp.slug)
-        sp.product_url = product_data.get("product_url", sp.product_url)
-        sp.category_path = product_data.get("category_path", sp.category_path)
-        sp.top_category = product_data.get("top_category", sp.top_category)
+        sp.name             = product_data.get("name", sp.name)
+        sp.brand            = product_data.get("brand", sp.brand)
+        sp.slug             = product_data.get("slug", sp.slug)
+        sp.product_url      = product_data.get("product_url", sp.product_url)
+        sp.category_path    = product_data.get("category_path", sp.category_path)
+        sp.top_category     = product_data.get("top_category", sp.top_category)
         sp.measurement_unit = product_data.get("measurement_unit", sp.measurement_unit)
-        sp.in_stock = product_data.get("in_stock", sp.in_stock)
-        sp.content_hash = new_hash
-        sp.last_seen = datetime.now(UTC)
+        sp.in_stock         = product_data.get("in_stock", sp.in_stock)
+        sp.content_hash     = new_hash
+        sp.last_seen        = now
+        sp.last_sync        = now
         if branch_id and sp.branch_id is None:
             sp.branch_id = branch_id
         return sp, False, True
@@ -282,6 +285,7 @@ def _upsert_product_record(
         measurement_unit=product_data.get("measurement_unit", ""),
         in_stock=product_data.get("in_stock", True),
         content_hash=new_hash,
+        last_sync=now,
     )
     db_session.add(sp)
     db_session.flush()
