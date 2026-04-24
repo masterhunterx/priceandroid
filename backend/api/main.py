@@ -118,15 +118,15 @@ def start_background_agents():
         def _metrics_loop():
             import time as _time
             while True:
-                _time.sleep(900)  # cada 15 min
                 try:
                     from core.metrics import refresh_catalog_gauges, refresh_feedback_gauges
                     refresh_catalog_gauges()
                     refresh_feedback_gauges()
                 except Exception as _e:
                     logger.warning(f"[Metrics] Error al refrescar gauges: {_e}")
+                _time.sleep(300)  # cada 5 min (antes 15 min con delay inicial de 15 min)
         threading.Thread(target=_metrics_loop, name="MetricsRefresher", daemon=True).start()
-        logger.info("[Metrics] Refresco periódico de gauges inicializado (cada 15 min).")
+        logger.info("[Metrics] Refresco periódico de gauges inicializado (cada 5 min, arranque inmediato).")
 
 
 @asynccontextmanager

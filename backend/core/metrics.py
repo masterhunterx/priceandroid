@@ -4,7 +4,10 @@ Métricas Prometheus — FreshCart Antigravity
 Expone métricas de negocio y salud del sistema para Grafana Cloud.
 """
 
+import logging
 from prometheus_client import Counter, Gauge, Histogram, Info
+
+_logger = logging.getLogger("AntigravityAPI")
 
 # ── Info del sistema ───────────────────────────────────────────────────────────
 app_info = Info("freshcart_app", "Información de la aplicación FreshCart")
@@ -105,13 +108,13 @@ user_searches_total = Counter(
 def refresh_catalog_gauges():
     """Actualiza los gauges de catálogo consultando la BD. Llamar periódicamente."""
     try:
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta
         from core.db import get_session
         from core.models import StoreProduct
         from sqlalchemy import func
 
-        UTC = timezone.utc
-        cutoff_48h = datetime.now(UTC) - timedelta(hours=48)
+        # datetime naive (sin tz) para compatibilidad con columnas TIMESTAMP WITHOUT TIME ZONE
+        cutoff_48h = datetime.utcnow() - timedelta(hours=48)
 
         with get_session() as session:
             total = session.query(func.count(StoreProduct.id)).scalar() or 0
@@ -133,13 +136,21 @@ def refresh_catalog_gauges():
         products_stale.set(stale)
         products_never_synced.set(never)
         products_unmatched.set(unmatched)
+        _logger.debug(f"[Metrics] Gauges actualizados: total={total}, oos={oos}, stale={stale}, unmatched={unmatched}")
 
-    except Exception:
-        pass  # No interrumpir el servidor si falla la métrica
+    except Exception as e:
+        _logger.warning(f"[Metrics] refresh_catalog_gauges falló: {e}", exc_info=True)
 
 
 def refresh_feedback_gauges():
     """Actualiza gauges de feedback desde la BD."""
+    # Pre-inicializar todas las combinaciones a 0 para evitar "No data" en Grafana
+    _FB_TYPES    = ["bug", "mejora", "sugerencia", "otro"]
+    _FB_STATUSES = ["pending", "analyzed", "resolved"]
+    for ft in _FB_TYPES:
+        for fs in _FB_STATUSES:
+            feedback_total.labels(type=ft, status=fs).set(0)
+
     try:
         from core.db import get_session
         from core.models import Feedback
@@ -153,5 +164,5 @@ def refresh_feedback_gauges():
         for fb_type, fb_status, count in rows:
             feedback_total.labels(type=fb_type, status=fb_status).set(count)
 
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.warning(f"[Metrics] refresh_feedback_gauges falló: {e}", exc_info=True)

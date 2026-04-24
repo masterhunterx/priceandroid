@@ -23,6 +23,7 @@ _HALF_OPEN = "half_open"
 
 _lock  = threading.Lock()
 _state: dict[str, dict] = {}
+_half_open_probing: dict[str, bool] = {}  # tiendas con request de prueba en curso
 
 
 def _get(store: str) -> dict:
@@ -38,6 +39,7 @@ def record_failure(store: str) -> bool:
         if s["state"] == _HALF_OPEN:
             s["state"]     = _OPEN
             s["opened_at"] = time.time()
+            _half_open_probing.pop(store, None)
             logger.warning(f"[CircuitBreaker] 🔴 Circuito re-ABIERTO para {store} (falló en HALF_OPEN). Pausa de {RECOVERY_TIMEOUT//3600}h.")
             return True
         if s["state"] == _CLOSED and s["failures"] >= FAILURE_THRESHOLD:
@@ -60,6 +62,7 @@ def record_success(store: str) -> None:
             logger.info(f"[CircuitBreaker] 🟢 Circuito CERRADO para {store}. Sync restaurado.")
         s["state"]    = _CLOSED
         s["failures"] = 0
+        _half_open_probing.pop(store, None)
 
 
 def is_open(store: str) -> bool:
@@ -73,9 +76,19 @@ def is_open(store: str) -> bool:
                 s["state"]    = _HALF_OPEN
                 s["failures"] = 0
                 logger.info(f"[CircuitBreaker] 🟡 Circuito HALF-OPEN para {store}. Probando recuperación...")
-                return False  # dejar pasar 1 request de prueba
+                # Permitir SOLO 1 request de prueba simultáneo
+                if _half_open_probing.get(store):
+                    return True  # ya hay una prueba en curso → bloquear el resto
+                _half_open_probing[store] = True
+                return False
             return True
-        return False  # HALF_OPEN → dejar pasar
+        if s["state"] == _HALF_OPEN:
+            # Si ya hay una prueba en curso, bloquear requests adicionales
+            if _half_open_probing.get(store):
+                return True
+            _half_open_probing[store] = True
+            return False
+        return False  # CLOSED → pasar
 
 
 def get_all_status() -> dict[str, dict]:
