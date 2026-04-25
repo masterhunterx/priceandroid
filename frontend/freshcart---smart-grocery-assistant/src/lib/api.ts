@@ -148,44 +148,21 @@ export async function getCategories(): Promise<Category[]> {
   return json.data;
 }
 
-// ── Notificaciones ─────────────────────────────────────────────────────────────
+// ── Notificaciones (deshabilitado — backend assistant eliminado) ───────────────
 
-export async function getNotifications(unreadOnly = false, limit = 50): Promise<Notification[]> {
-  const resp = await fetchWithAuth(`${API_BASE_URL}/assistant/notifications?unread_only=${unreadOnly}&limit=${limit}`, { headers: getHeaders() });
-  const json = await resp.json();
-  if (!json.success) throw new Error(json.error || 'Failed to fetch notifications');
-  return json.data;
+export async function getNotifications(_unreadOnly = false, _limit = 50): Promise<Notification[]> {
+  return [];
 }
 
-export async function markNotificationRead(id: number): Promise<void> {
-  await fetchWithAuth(`${API_BASE_URL}/assistant/notifications/${id}/read`, {
-    method: 'POST',
-    headers: getHeaders(),
-  });
-}
+export async function markNotificationRead(_id: number): Promise<void> {}
 
-export async function deleteNotification(id: number): Promise<void> {
-  await fetchWithAuth(`${API_BASE_URL}/assistant/notifications/${id}`, {
-    method: 'DELETE',
-    headers: getHeaders(),
-  });
-}
+export async function deleteNotification(_id: number): Promise<void> {}
 
 export async function clearReadNotifications(): Promise<number> {
-  const resp = await fetchWithAuth(`${API_BASE_URL}/assistant/notifications`, {
-    method: 'DELETE',
-    headers: getHeaders(),
-  });
-  const json = await resp.json();
-  return json.data?.deleted_count ?? 0;
+  return 0;
 }
 
-export async function refreshNotifications(): Promise<void> {
-  await fetchWithAuth(`${API_BASE_URL}/assistant/notifications/refresh`, {
-    method: 'POST',
-    headers: getHeaders(),
-  });
-}
+export async function refreshNotifications(): Promise<void> {}
 
 // ── Favoritos ──────────────────────────────────────────────────────────────────
 

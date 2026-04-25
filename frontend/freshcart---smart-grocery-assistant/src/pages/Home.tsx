@@ -67,14 +67,12 @@ const Home: React.FC = () => {
         const results = await Promise.allSettled([
           getDeals(DEALS_PAGE_SIZE, 0),
           getCategories(),
-          getNotifications(true),
           getHistoricLows(5)
         ]);
 
         if (results[0].status === 'fulfilled') setDeals(results[0].value);
         if (results[1].status === 'fulfilled') setCategories(results[1].value);
-        if (results[2].status === 'fulfilled') setNotifications(results[2].value);
-        if (results[3].status === 'fulfilled') setHistoricLows(results[3].value);
+        if (results[2].status === 'fulfilled') setHistoricLows(results[2].value);
       } catch (error) {
         console.error('Error loading home data:', error);
       } finally {

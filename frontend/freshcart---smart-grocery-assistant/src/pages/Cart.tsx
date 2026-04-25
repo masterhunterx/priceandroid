@@ -26,13 +26,13 @@ const Cart: React.FC = () => {
         </span>
         <h2 className="text-xl font-black text-slate-700 dark:text-slate-300">Tu carro está vacío</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Ve al asistente KAIROS, elige un supermercado y toca "Agregar al Carro".
+          Busca productos y agrégalos al carro desde la pantalla de búsqueda.
         </p>
         <button
-          onClick={() => navigate('/assistant')}
+          onClick={() => navigate('/search')}
           className="mt-2 px-6 py-3 rounded-full bg-primary text-black font-black text-sm active:scale-95 transition-all"
         >
-          Ir al Asistente
+          Buscar productos
         </button>
       </div>
     );
