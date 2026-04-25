@@ -9,6 +9,8 @@ build/
 
 # Environment secrets - NEVER commit these
 .env
+*.env.bak
+*.env.backup
 backend/.env
 frontend/**/.env
 frontend/**/.env.local
