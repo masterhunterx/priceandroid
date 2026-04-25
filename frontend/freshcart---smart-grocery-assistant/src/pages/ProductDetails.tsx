@@ -69,13 +69,14 @@ const ProductDetails: React.FC = () => {
     setSyncing(true);
     try {
       const loadingToast = toast.loading('Sincronizando precios en vivo...');
-      await syncProduct(id);
+      const result = await syncProduct(id);
       await loadProduct(true);
       toast.dismiss(loadingToast);
-      toast.success('Precios actualizados con éxito', {
-        icon: '✅',
-        style: { borderRadius: '10px', background: '#333', color: '#fff' },
-      });
+      if (result?.updated_count > 0) {
+        toast.success('Precios actualizados', { style: { borderRadius: '10px', background: '#333', color: '#fff' } });
+      } else {
+        toast('No se pudo verificar ahora — la tienda bloqueó la solicitud. Intenta en unos minutos.', { icon: '⚠️', duration: 4000 });
+      }
     } catch (error) {
       console.error('Error syncing product:', error);
       toast.error('Error al sincronizar precios');
