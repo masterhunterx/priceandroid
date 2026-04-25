@@ -49,7 +49,7 @@ BFF_API = "https://be-reg-groceries-bff-sisa.ecomm.cencosud.com/catalog"
 BFF_SEARCH_ENDPOINT = f"{BFF_API}/plp"
 
 # API key for Cencosud BFF (Captured from network traffic)
-BFF_API_KEY = os.getenv("SANTA_ISABEL_API_KEY", "REDACTED_SISA_CATALOG_KEY")
+BFF_API_KEY = os.getenv("SANTA_ISABEL_API_KEY", "")
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
