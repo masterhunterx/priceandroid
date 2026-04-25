@@ -11,12 +11,18 @@ Usage (from the backend/ directory):
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
 import re
+
+# API keys — set via env vars or fall back to read-only public keys
+_JUMBO_LOCATION_KEY    = os.environ.get("JUMBO_LOCATION_KEY",    "REDACTED_JUMBO_LOCATION_KEY")
+_SISA_LOCATION_KEY     = os.environ.get("SISA_LOCATION_KEY",     "REDACTED_SISA_LOCATION_KEY")
+_CONTENTFUL_CDN_TOKEN  = os.environ.get("CONTENTFUL_CDN_TOKEN",  "REDACTED_CONTENTFUL_TOKEN")
 
 # ---------------------------------------------------------------------------
 # Path setup so this runs both as a module and standalone
@@ -60,7 +66,7 @@ def _fetch_jumbo_branches() -> list[dict]:
     """Fetches Jumbo branches via Cencosud BFF. Returns normalised dicts."""
     url = "https://be-reg-groceries-bff-jumbo.ecomm.cencosud.com/location/pickup-stores"
     headers = {
-        "apikey": "REDACTED_JUMBO_LOCATION_KEY",
+        "apikey": _JUMBO_LOCATION_KEY,
         "x-client-platform": "web",
         "User-Agent": "Mozilla/5.0",
     }
@@ -89,7 +95,7 @@ def _fetch_santa_isabel_branches() -> list[dict]:
     """Fetches Santa Isabel branches via Cencosud BFF."""
     url = "https://be-reg-groceries-bff-sisa.ecomm.cencosud.com/location/pickup-stores"
     headers = {
-        "apikey": "REDACTED_SISA_LOCATION_KEY",
+        "apikey": _SISA_LOCATION_KEY,
         "x-client-platform": "web",
         "User-Agent": "Mozilla/5.0",
     }
@@ -121,7 +127,7 @@ def _fetch_unimarc_branches() -> list[dict]:
         "?content_type=sucursal&fields.idFormato=1&limit=600"
     )
     headers = {
-        "Authorization": "Bearer REDACTED_CONTENTFUL_TOKEN",
+        "Authorization": f"Bearer {_CONTENTFUL_CDN_TOKEN}",
         "User-Agent": "Mozilla/5.0",
     }
     resp = requests.get(url, headers=headers, timeout=15)
