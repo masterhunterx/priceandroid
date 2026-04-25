@@ -12,7 +12,7 @@ import os
 from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
@@ -294,7 +294,7 @@ async def db_lock_middleware(request, call_next):
 _INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
 
 @app.post("/internal/db/lock")
-async def db_lock(request):
+async def db_lock(request: Request):
     token = request.headers.get("X-Internal-Token", "")
     if not _INTERNAL_SECRET or token != _INTERNAL_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -303,7 +303,7 @@ async def db_lock(request):
     return {"status": "locked"}
 
 @app.post("/internal/db/unlock")
-async def db_unlock(request):
+async def db_unlock(request: Request):
     token = request.headers.get("X-Internal-Token", "")
     if not _INTERNAL_SECRET or token != _INTERNAL_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -312,7 +312,7 @@ async def db_unlock(request):
     return {"status": "unlocked"}
 
 @app.get("/internal/db/status")
-async def db_status(request):
+async def db_status(request: Request):
     token = request.headers.get("X-Internal-Token", "")
     if not _INTERNAL_SECRET or token != _INTERNAL_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -336,7 +336,7 @@ def _honeytoken_block(request, label: str):
     raise HTTPException(status_code=403, detail="SECURITY BREACH: IP BLOCKED BY FLUXENGINE SHIELD.")
 
 @app.get("/api/admin/config/v1/internal_metrics")
-async def honeytoken_internal_metrics(request):
+async def honeytoken_internal_metrics(request: Request):
     _honeytoken_block(request, "internal_metrics")
 
 @app.get("/wp-admin")
@@ -347,7 +347,7 @@ async def honeytoken_internal_metrics(request):
 @app.get("/config.php")
 @app.get("/.git/config")
 @app.get("/api/v1/admin")
-async def honeytoken_common_scans(request):
+async def honeytoken_common_scans(request: Request):
     _honeytoken_block(request, request.url.path)
 
 @app.get("/")

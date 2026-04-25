@@ -8,7 +8,7 @@ extrema de ahorro (Ultraplan).
 import threading
 from collections import Counter
 from typing import Optional
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, Depends, Body, HTTPException
 from core.db import get_session
 from core.models import Product, StoreProduct, Price, Store
 from sqlalchemy import func
@@ -294,7 +294,7 @@ def get_historic_lows(limit: int = Query(10, ge=1, le=50)):
 
 
 @router.post("/optimize/ultraplan", response_model=UnifiedResponse)
-def run_ultraplan(product_ids: list[int]):
+def run_ultraplan(product_ids: list[int] = Body(..., embed=True)):
     """
     Lógica 'Ultraplan': Algoritmo avanzado que calcula la ruta de compra óptima
     para una canasta de productos específica, cruzando múltiples tiendas y ofertas.

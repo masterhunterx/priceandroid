@@ -16,7 +16,7 @@ from core.db import get_session
 from core.models import Product, StoreProduct, Price, Store, ProductMatch, UserPreference
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
-from ..schemas import UnifiedResponse, SearchResponse, ProductOut, ProductDetailOut, PricePointOut, PriceHistoryOut
+from ..schemas import UnifiedResponse, SearchResponse, ProductOut, ProductDetailOut, PricePointOut, PriceHistoryOut, OptimizeCartRequest
 from ..utils import (
     build_price_points,
     preload_latest_prices,
@@ -51,12 +51,15 @@ def _get_cached(key: str):
 
 def _set_cached(key: str, value):
     with _search_cache_lock:
-        # Limpiar entradas expiradas cuando el caché crece (evitar fuga de memoria)
-        if len(_search_cache) > 500:
+        if len(_search_cache) >= 500:
             now = time.time()
             expired = [k for k, (ts, _) in _search_cache.items() if now - ts >= _SEARCH_CACHE_TTL]
             for k in expired:
                 del _search_cache[k]
+            # Si no había expiradas, echar la entrada más antigua (LRU mínimo)
+            if len(_search_cache) >= 500:
+                oldest = min(_search_cache, key=lambda k: _search_cache[k][0])
+                del _search_cache[oldest]
         _search_cache[key] = (time.time(), value)
 
 def _strip_accents(text: str) -> str:
@@ -492,3 +495,12 @@ def sync_product_details(product_id: int):
 def verify_price_realtime(product_id: int):
     """Alias para la sincronización de precios (Verificación de integridad)."""
     return sync_product_details(product_id)
+
+
+@router.post("/optimize-cart", response_model=UnifiedResponse)
+def optimize_cart_endpoint(req: OptimizeCartRequest):
+    """Optimiza un carrito de compras eligiendo la mejor tienda por producto."""
+    from domain.cart_optimizer import optimize_cart
+    with get_session() as session:
+        result = optimize_cart(session, list(req.items))
+    return UnifiedResponse(data=result)

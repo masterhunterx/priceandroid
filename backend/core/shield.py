@@ -140,7 +140,7 @@ class Shield3:
         Bloquea permanentemente una IP en la base de datos y actualiza la caché inmediata.
         """
         # --- SEGURIDAD EN DESARROLLO: Nunca bloquear localhost para evitar quedar fuera del sistema ---
-        if ip in ("127.0.0.1", "::1", "localhost"):
+        if ip in ("127.0.0.1", "::1", "localhost", "testclient"):
             logger.warning(f"⚠️ Supresión: Se intentó bloquear {ip} por {reason}, pero se omitió (Lista Blanca).")
             return False
             

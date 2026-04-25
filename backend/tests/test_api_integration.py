@@ -104,7 +104,7 @@ def test_pantry_list_ok(api_client, headers):
 
 
 def test_pantry_buy_missing_body_422(api_client, headers):
-    r = api_client.post("/api/pantry/buy", json={}, headers=headers)
+    r = api_client.post("/api/pantry/purchase", json={}, headers=headers)
     assert r.status_code == 422
 
 

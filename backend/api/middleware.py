@@ -170,7 +170,7 @@ async def shield_security_middleware(request: Request, call_next):
     # 3. Rate Limiting — global + por path
     is_stress_mode = os.environ.get("STRESS_TEST_MODE", "false").lower() == "true"
 
-    if ip not in ("127.0.0.1", "localhost", "::1") and not is_stress_mode:
+    if ip not in ("127.0.0.1", "localhost", "::1", "testclient") and not is_stress_mode:
         # 3a. Límite global
         allowed, count = Shield3.track_request(ip, limit=20, window=10)
         if not allowed:
