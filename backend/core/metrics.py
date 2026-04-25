@@ -108,27 +108,40 @@ user_searches_total = Counter(
 def refresh_catalog_gauges():
     """Actualiza los gauges de catálogo consultando la BD. Llamar periódicamente."""
     try:
+        from datetime import timezone
         from datetime import datetime, timedelta
         from core.db import get_session
         from core.models import StoreProduct
-        from sqlalchemy import func
+        from sqlalchemy import func, or_, text
 
-        # datetime naive (sin tz) para compatibilidad con columnas TIMESTAMP WITHOUT TIME ZONE
-        cutoff_48h = datetime.utcnow() - timedelta(hours=48)
-
+        # Usar server-side NOW() para evitar problemas de timezone naive/aware entre
+        # Python y PostgreSQL (el column usa DateTime sin timezone=True pero el default
+        # es datetime.now(UTC), lo que puede causar discrepancias al comparar en Python).
         with get_session() as session:
             total = session.query(func.count(StoreProduct.id)).scalar() or 0
             oos = session.query(func.count(StoreProduct.id)).filter(
                 StoreProduct.in_stock == False
             ).scalar() or 0
-            stale = session.query(func.count(StoreProduct.id)).filter(
-                (StoreProduct.last_sync == None) | (StoreProduct.last_sync < cutoff_48h)
-            ).scalar() or 0
+
+            # Comparación server-side: evita TypeError aware vs naive en PostgreSQL.
+            # Detecta el dialecto para usar sintaxis compatible.
+            dialect = session.bind.dialect.name if session.bind else "postgresql"
+            if dialect == "sqlite":
+                stale_sql = text(
+                    "SELECT COUNT(*) FROM store_products "
+                    "WHERE last_sync IS NULL OR last_sync < datetime('now', '-48 hours')"
+                )
+            else:
+                stale_sql = text(
+                    "SELECT COUNT(*) FROM store_products "
+                    "WHERE last_sync IS NULL OR last_sync < NOW() - INTERVAL '48 hours'"
+                )
+            stale = session.execute(stale_sql).scalar() or 0
             never = session.query(func.count(StoreProduct.id)).filter(
-                StoreProduct.last_sync == None
+                StoreProduct.last_sync.is_(None)
             ).scalar() or 0
             unmatched = session.query(func.count(StoreProduct.id)).filter(
-                StoreProduct.product_id == None
+                StoreProduct.product_id.is_(None)
             ).scalar() or 0
 
         products_total.set(total)
@@ -136,7 +149,7 @@ def refresh_catalog_gauges():
         products_stale.set(stale)
         products_never_synced.set(never)
         products_unmatched.set(unmatched)
-        _logger.debug(f"[Metrics] Gauges actualizados: total={total}, oos={oos}, stale={stale}, unmatched={unmatched}")
+        _logger.info(f"[Metrics] Gauges OK — total={total}, oos={oos}, stale={stale}, unmatched={unmatched}")
 
     except Exception as e:
         _logger.warning(f"[Metrics] refresh_catalog_gauges falló: {e}", exc_info=True)
