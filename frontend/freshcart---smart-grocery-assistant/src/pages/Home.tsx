@@ -281,7 +281,7 @@ const Home: React.FC = () => {
                 </div>
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-4 text-center">Buscando las mejores ofertas diarias...</h4>
                 <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-widest font-black flex items-center gap-1">
-                  <span className="bg-primary text-background-dark px-1 rounded">KAIROS AI</span> ANALYZING STORES
+                  BUSCANDO OFERTAS
                 </p>
                 <div className="mt-6 flex gap-1.5">
                   <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
@@ -337,7 +337,7 @@ const Home: React.FC = () => {
               <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Mínimos Históricos</h3>
               <div className="flex items-center gap-1 text-primary text-sm font-semibold">
                 <span className="material-symbols-outlined text-sm">trending_down</span>
-                KAIROS Insights
+                Precios mínimos
               </div>
             </div>
             <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar pb-4">
@@ -363,55 +363,7 @@ const Home: React.FC = () => {
           </section>
         )}
 
-        {/* Savings Card (Dynamic Insights) */}
-        <section className="mt-8 px-4 mb-8">
-          <div className="bg-gradient-to-br from-[#1a2e22] to-[#0d1a12] border border-primary/20 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-               <span className="material-symbols-outlined text-[120px] text-primary">auto_awesome</span>
-            </div>
-            
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="bg-primary text-background-dark text-[10px] font-black px-2 py-0.5 rounded uppercase">AI Active</span>
-                <span className="text-primary text-[10px] font-bold uppercase tracking-widest">KAIROS Intelligence</span>
-              </div>
-              
-              {notifications.length > 0 ? (
-                <div>
-                  <h4 className="text-white text-xl font-bold leading-tight">
-                    {getTodayNotifications().length > 0 
-                      ? `Tienes ${getTodayNotifications().length} alertas de ahorro nuevas hoy`
-                      : `Revisa tus ${notifications.length} alertas guardadas`
-                    }
-                  </h4>
-                  <p className="text-slate-400 text-sm mt-1">
-                    {getTodayNotifications().length > 0 
-                      ? getTodayNotifications()[0].title 
-                      : notifications[0].title
-                    }
-                  </p>
-                  <button 
-                    onClick={() => navigate('/notifications')}
-                    className="mt-4 bg-primary text-background-dark px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all"
-                  >
-                    Ver Oportunidades
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <h4 className="text-white text-xl font-bold leading-tight">Buscando oportunidades de ahorro...</h4>
-                  <p className="text-slate-400 text-sm mt-1">El sistema está monitoreando precios en tiempo real para avisarte.</p>
-                  <button 
-                    onClick={() => navigate('/notifications')}
-                    className="mt-4 bg-slate-800 text-white px-6 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-all"
-                  >
-                    Abrir Notificaciones
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
+        {/* Savings Card deshabilitada — KAIROS inactivo */}
       </main>
     </div>
   );
