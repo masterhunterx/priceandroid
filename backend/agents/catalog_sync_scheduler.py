@@ -106,6 +106,7 @@ def sync_store(store_slug: str) -> dict:
 
         stats["categories"] = len(categories)
 
+        zero_categories = 0
         for category in categories:
             try:
                 logger.info(f"[CatalogSync] {store_slug} → '{category}'")
@@ -113,10 +114,18 @@ def sync_store(store_slug: str) -> dict:
                 stats["scraped"] += len(products)
 
                 if products:
+                    zero_categories = 0
                     with get_session() as db:
                         store = db.query(Store).filter_by(slug=store_slug).first()
                         saved = upsert_store_products(db, store, products)
                         stats["upserted"] += len(saved)
+                else:
+                    zero_categories += 1
+                    # 3 categorías consecutivas sin resultados → probablemente bloqueado
+                    if zero_categories >= 3:
+                        logger.warning(f"[CatalogSync] {store_slug}: 3 categorías consecutivas vacías — posible bloqueo anti-bot. Abortando ciclo.")
+                        stats["errors"] += 1
+                        break
 
                 # Pausa entre categorías para no saturar la API de la tienda
                 time.sleep(3)
