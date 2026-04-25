@@ -535,19 +535,24 @@ const ProductDetails: React.FC = () => {
                           <span className="material-symbols-outlined text-[13px]">search</span>
                           Buscar en tienda
                         </a>
-                        {/* Link directo — puede estar desactualizado */}
-                        {pricePoint.product_url && (
-                          <a
-                            href={pricePoint.product_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Link directo (puede estar desactualizado)"
-                            className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-[13px]">open_in_new</span>
-                            Directo
-                          </a>
-                        )}
+                        {/* Link directo — puede ser bloqueado por el WAF de la tienda */}
+                        {pricePoint.product_url && (() => {
+                          const safeUrl = pricePoint.product_url.startsWith('http')
+                            ? pricePoint.product_url
+                            : `https://${pricePoint.product_url}`;
+                          return (
+                            <a
+                              href={safeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => toast('Si la página no carga, usa "Buscar en tienda"', { icon: '⚠️', duration: 3000 })}
+                              className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                              Directo
+                            </a>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
