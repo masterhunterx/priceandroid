@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Header, BackgroundTasks, Depends
 from core.db import get_session
 from core.models import Product, StoreProduct, Price, Store, ProductMatch, UserPreference
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from ..schemas import UnifiedResponse, SearchResponse, ProductOut, ProductDetailOut, PricePointOut, PriceHistoryOut, OptimizeCartRequest
 from ..utils import (
@@ -147,11 +147,24 @@ def search_products(
             main_query = main_query.filter(StoreProduct.in_stock == in_stock)
 
         if category:
-            cat_esc = category.lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
-            main_query = main_query.filter(
-                (func.lower(StoreProduct.top_category).like(f"%{cat_esc}%", escape='\\')) |
-                (func.lower(StoreProduct.category_path).like(f"%{cat_esc}%", escape='\\'))
-            )
+            from .deals import _CATEGORY_MAP
+            cat_entry = next((c for c in _CATEGORY_MAP if c['name'].lower() == category.strip().lower()), None)
+            if cat_entry:
+                # Usar los keywords canónicos para hacer match con los valores raw del scraper
+                kw_conditions = [
+                    func.lower(StoreProduct.top_category).like(f"%{kw}%")
+                    for kw in cat_entry['keywords']
+                ] + [
+                    func.lower(StoreProduct.category_path).like(f"%{kw}%")
+                    for kw in cat_entry['keywords']
+                ]
+                main_query = main_query.filter(or_(*kw_conditions))
+            else:
+                cat_esc = category.lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+                main_query = main_query.filter(
+                    (func.lower(StoreProduct.top_category).like(f"%{cat_esc}%", escape='\\')) |
+                    (func.lower(StoreProduct.category_path).like(f"%{cat_esc}%", escape='\\'))
+                )
             
         if store:
             main_query = main_query.filter(StoreProduct.store.has(slug=store))

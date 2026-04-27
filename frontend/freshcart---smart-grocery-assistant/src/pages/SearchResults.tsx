@@ -34,11 +34,13 @@ const SearchResults: React.FC = () => {
   // Si la URL no trae store, inicializar desde la tienda activa del contexto
   const [results, setResults]       = useState<Product[]>([]);
   const [total, setTotal]           = useState(0);
+  const [page, setPage]             = useState(1);
   const [loading, setLoading]       = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [sort, setSort]             = useState('price_asc');
   const [store, setStore]           = useState(storeParam || selectedStore || '');
   const [favoritingId, setFavoritingId] = useState<number | string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Autocomplete
   const [searchQuery, setSearchQuery]       = useState(query);
@@ -62,13 +64,17 @@ const SearchResults: React.FC = () => {
   const handleStoreToggle = (slug: string) => {
     const next = store === slug ? '' : slug;
     setStore(next);
+    setPage(1);
     const p = new URLSearchParams(searchParams);
     if (next) p.set('store', next); else p.delete('store');
     setSearchParams(p, { replace: true });
   };
 
   const handleSort = () => {
-    setSort(s => (s === 'price_asc' ? 'price_desc' : 'price_asc'));
+    setSort(s => {
+      setPage(1);
+      return s === 'price_asc' ? 'price_desc' : 'price_asc';
+    });
   };
 
   const handleToggleFavorite = async (e: React.MouseEvent, product: Product) => {
@@ -87,20 +93,26 @@ const SearchResults: React.FC = () => {
     }
   };
 
-  // ── Execute search whenever query/sort/store changes ──────────────────────────
+  // Resetear página cuando cambian los filtros
+  useEffect(() => {
+    setPage(1);
+    setResults([]);
+  }, [query, categoryParam, sort, store]);
+
+  // ── Execute search whenever query/sort/store/page changes ─────────────────────
   useEffect(() => {
     if (!query && !categoryParam) { setResults([]); setTotal(0); setSearchError(false); return; }
     let cancelled = false;
     setSearchError(false);
+    setLoading(true);
     (async () => {
-      setLoading(true);
       try {
         const branchContext = getBranchContext();
-        const data = await searchProducts(query, categoryParam, 1, 20, sort, store, branchContext);
+        const data = await searchProducts(query, categoryParam, page, 20, sort, store, branchContext);
         if (cancelled) return;
-        setResults(data.results);
+        setResults(prev => page === 1 ? data.results : [...prev, ...data.results]);
         setTotal(data.total);
-        if (query) saveRecentSearch(query);
+        if (page === 1 && query) saveRecentSearch(query);
       } catch {
         if (cancelled) return;
         setSearchError(true);
@@ -109,7 +121,21 @@ const SearchResults: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [query, categoryParam, sort, store, getBranchContext]);
+  }, [query, categoryParam, sort, store, page, getBranchContext]);
+
+  // ── Scroll infinito ───────────────────────────────────────────────────────────
+  const hasMore = results.length < total;
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && hasMore && !loading) {
+        setPage(p => p + 1);
+      }
+    }, { rootMargin: '300px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading]);
 
   // ── Real-time suggestions + live search debounce ──────────────────────────────
   const liveSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -467,6 +493,13 @@ const SearchResults: React.FC = () => {
             {loading && [1, 2, 3].map(i => (
               <div key={i} className="h-40 w-full animate-pulse bg-slate-200 dark:bg-slate-800 rounded-xl" />
             ))}
+
+            {/* Sentinel para scroll infinito */}
+            <div ref={sentinelRef} className="h-1" />
+
+            {!loading && !hasMore && results.length > 0 && (
+              <p className="text-center text-xs text-slate-400 py-4">— {total} productos mostrados —</p>
+            )}
 
             {!loading && searchError && (
               <div className="flex flex-col items-center justify-center mt-20 text-center px-10">
