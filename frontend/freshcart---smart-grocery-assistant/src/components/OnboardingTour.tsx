@@ -23,11 +23,11 @@ const STEPS: TourStep[] = [
     position: 'bottom',
   },
   {
-    selector: '[data-tour="kairos-btn"]',
-    title: 'Tu asistente KAIROS',
-    body: 'El botón central es KAIROS, tu asistente inteligente de ahorro. Te ayuda a planificar tu compra.',
-    emoji: '✨',
-    position: 'top',
+    selector: '[data-tour="categories"]',
+    title: 'Explora por categorías',
+    body: 'Navega por lácteos, carnes, bebidas y más. Toca cualquier categoría para ver los productos de tu tienda.',
+    emoji: '🛒',
+    position: 'bottom',
   },
   {
     selector: '[data-tour="feedback-btn"]',

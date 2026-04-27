@@ -253,7 +253,7 @@ const Home: React.FC = () => {
       <main>
         {/* Categories */}
         <section>
-          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div data-tour="categories" className="flex items-center justify-between px-4 pt-4 pb-2">
             <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Categorías</h3>
             <button 
               onClick={() => navigate('/categories')}
