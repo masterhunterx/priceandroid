@@ -10,14 +10,26 @@ interface Category {
   product_count: number;
 }
 
+// Algunas categorías canónicas no coinciden exactamente con el top_category raw
+// del scraper (ej. "Limpieza del Hogar" vs "Limpieza"). Mapeamos al término
+// que el backend actual sí indexa correctamente.
+const CATEGORY_SEARCH_OVERRIDES: Record<string, string> = {
+  'Lácteos y Huevos': 'Lácteos',
+  'Limpieza del Hogar': 'Limpieza',
+  'Panadería y Dulces': 'Panadería',
+  'Hogar y Tecnología': 'Hogar',
+};
+
 const Categories: React.FC = () => {
   const navigate = useNavigate();
   const { selectedStore } = useLocation();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const navToCategory = (name: string) =>
-    navigate(`/search?category=${encodeURIComponent(name)}${selectedStore ? `&store=${selectedStore}` : ''}`);
+  const navToCategory = (name: string) => {
+    const searchTerm = CATEGORY_SEARCH_OVERRIDES[name] ?? name;
+    navigate(`/search?category=${encodeURIComponent(searchTerm)}${selectedStore ? `&store=${selectedStore}` : ''}`);
+  };
 
   useEffect(() => {
     setLoading(true);

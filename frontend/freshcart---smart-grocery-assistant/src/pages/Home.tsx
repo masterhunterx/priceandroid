@@ -35,6 +35,13 @@ function getUsername(): string {
   } catch { return 'Usuario'; }
 }
 
+const CATEGORY_SEARCH_OVERRIDES: Record<string, string> = {
+  'Lácteos y Huevos': 'Lácteos',
+  'Limpieza del Hogar': 'Limpieza',
+  'Panadería y Dulces': 'Panadería',
+  'Hogar y Tecnología': 'Hogar',
+};
+
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { coords, selectedBranches, selectedStore, setSelectedStore } = useLocation();
@@ -301,7 +308,7 @@ const Home: React.FC = () => {
             {categories.map((cat, idx) => (
               <div
                 key={cat.name}
-                onClick={() => navigate(`/search?category=${encodeURIComponent(cat.name)}${selectedStore ? `&store=${selectedStore}` : ''}`)}
+                onClick={() => navigate(`/search?category=${encodeURIComponent(CATEGORY_SEARCH_OVERRIDES[cat.name] ?? cat.name)}${selectedStore ? `&store=${selectedStore}` : ''}`)}
                 className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-xl px-4 border cursor-pointer border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800`}
               >
                 <span className="material-symbols-outlined text-[20px] text-primary">
