@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCategories } from '../lib/api';
+import { useLocation } from '../context/LocationContext';
 
 interface Category {
   name: string;
@@ -11,8 +12,12 @@ interface Category {
 
 const Categories: React.FC = () => {
   const navigate = useNavigate();
+  const { selectedStore } = useLocation();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const navToCategory = (name: string) =>
+    navigate(`/search?category=${encodeURIComponent(name)}${selectedStore ? `&store=${selectedStore}` : ''}`);
 
   useEffect(() => {
     getCategories()
@@ -59,7 +64,7 @@ const Categories: React.FC = () => {
                   {featuredCategories.map(cat => (
                     <button
                       key={cat.name}
-                      onClick={() => navigate(`/search?category=${encodeURIComponent(cat.name)}`)}
+                      onClick={() => navToCategory(cat.name)}
                       className="relative overflow-hidden rounded-2xl p-4 text-left active:scale-95 transition-transform"
                       style={{ background: `${cat.color}18`, border: `1.5px solid ${cat.color}30` }}
                     >
@@ -87,7 +92,7 @@ const Categories: React.FC = () => {
                   {restCategories.map((cat, idx) => (
                     <button
                       key={cat.name}
-                      onClick={() => navigate(`/search?category=${encodeURIComponent(cat.name)}`)}
+                      onClick={() => navToCategory(cat.name)}
                       className={`w-full flex items-center gap-4 px-4 py-3.5 active:bg-slate-50 dark:active:bg-white/5 transition-colors text-left ${
                         idx < restCategories.length - 1 ? 'border-b border-slate-100 dark:border-white/5' : ''
                       }`}

@@ -24,19 +24,20 @@ const STORE_LABELS: Record<string, string> = {
 
 const SearchResults: React.FC = () => {
   const navigate = useNavigate();
-  const { getBranchContext } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { getBranchContext, selectedStore } = useLocation();
 
   const query        = searchParams.get('q') || '';
   const categoryParam = searchParams.get('category') || '';
   const storeParam   = searchParams.get('store') || '';
 
+  // Si la URL no trae store, inicializar desde la tienda activa del contexto
   const [results, setResults]       = useState<Product[]>([]);
   const [total, setTotal]           = useState(0);
   const [loading, setLoading]       = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [sort, setSort]             = useState('price_asc');
-  const [store, setStore]           = useState(storeParam);
+  const [store, setStore]           = useState(storeParam || selectedStore || '');
   const [favoritingId, setFavoritingId] = useState<number | string | null>(null);
 
   // Autocomplete

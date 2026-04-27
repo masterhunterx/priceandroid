@@ -70,6 +70,9 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     setDealsOffset(0);
+    setDeals([]);
+    setHistoricLows([]);
+    setSearchingDeals(true);
     async function loadData() {
       try {
         const results = await Promise.allSettled([
@@ -271,7 +274,7 @@ const Home: React.FC = () => {
             {categories.map((cat, idx) => (
               <div
                 key={cat.name}
-                onClick={() => navigate(`/search?category=${encodeURIComponent(cat.name)}`)}
+                onClick={() => navigate(`/search?category=${encodeURIComponent(cat.name)}${selectedStore ? `&store=${selectedStore}` : ''}`)}
                 className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-xl px-4 border cursor-pointer border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800`}
               >
                 <span className="material-symbols-outlined text-[20px] text-primary">
@@ -375,8 +378,13 @@ const Home: React.FC = () => {
           </div>
         </section>
 
-        {/* Historic Lows */}
-        {historicLows.length > 0 && (
+        {/* Historic Lows — filtrados por tienda activa */}
+        {(() => {
+          const visibleLows = selectedStore
+            ? historicLows.filter(h => h.store_slug === selectedStore)
+            : historicLows;
+          if (visibleLows.length === 0) return null;
+          return (
           <section className="mt-6">
             <div className="flex items-center justify-between px-4 pb-4">
               <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Mínimos Históricos</h3>
@@ -386,7 +394,7 @@ const Home: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar pb-4">
-              {historicLows.map((deal) => (
+              {visibleLows.map((deal) => (
                 <div
                   key={`historic-${deal.product_id}`}
                   onClick={() => navigate(`/product/${deal.product_id}`)}
@@ -406,7 +414,8 @@ const Home: React.FC = () => {
               ))}
             </div>
           </section>
-        )}
+          );
+        })()}
 
         {/* Savings Card deshabilitada — KAIROS inactivo */}
       </main>
