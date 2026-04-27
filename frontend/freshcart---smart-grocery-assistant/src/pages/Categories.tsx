@@ -13,11 +13,19 @@ interface Category {
 // Algunas categorías canónicas no coinciden exactamente con el top_category raw
 // del scraper (ej. "Limpieza del Hogar" vs "Limpieza"). Mapeamos al término
 // que el backend actual sí indexa correctamente.
+// Cada supermercado guarda top_category con nombres distintos al canónico.
+// Usamos el primer término significativo que funciona en todos los stores.
 const CATEGORY_SEARCH_OVERRIDES: Record<string, string> = {
-  'Lácteos y Huevos': 'Lácteos',
+  'Lácteos y Huevos':   'Lácteos',
   'Limpieza del Hogar': 'Limpieza',
   'Panadería y Dulces': 'Panadería',
   'Hogar y Tecnología': 'Hogar',
+  'Bebidas y Licores':  'Bebidas',
+  'Bebés y Niños':      'Bebé',
+  'Quesos y Fiambres':  'Quesos',
+  'Carnes y Pescados':  'Carnes',
+  'Frutas y Verduras':  'Frutas',
+  'Comidas Preparadas': 'Preparad',
 };
 
 const Categories: React.FC = () => {

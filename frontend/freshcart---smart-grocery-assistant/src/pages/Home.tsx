@@ -36,10 +36,16 @@ function getUsername(): string {
 }
 
 const CATEGORY_SEARCH_OVERRIDES: Record<string, string> = {
-  'Lácteos y Huevos': 'Lácteos',
+  'Lácteos y Huevos':   'Lácteos',
   'Limpieza del Hogar': 'Limpieza',
   'Panadería y Dulces': 'Panadería',
   'Hogar y Tecnología': 'Hogar',
+  'Bebidas y Licores':  'Bebidas',
+  'Bebés y Niños':      'Bebé',
+  'Quesos y Fiambres':  'Quesos',
+  'Carnes y Pescados':  'Carnes',
+  'Frutas y Verduras':  'Frutas',
+  'Comidas Preparadas': 'Preparad',
 };
 
 const Home: React.FC = () => {
