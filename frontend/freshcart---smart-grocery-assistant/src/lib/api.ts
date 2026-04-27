@@ -143,8 +143,9 @@ export async function getDeals(limit = 20, offset = 0, store?: string): Promise<
   return json.data;
 }
 
-export async function getCategories(): Promise<Category[]> {
-  const resp = await fetchWithAuth(`${API_BASE_URL}/categories`, { headers: getHeaders() });
+export async function getCategories(store?: string): Promise<Category[]> {
+  const params = store ? `?store=${encodeURIComponent(store)}` : '';
+  const resp = await fetchWithAuth(`${API_BASE_URL}/categories${params}`, { headers: getHeaders() });
   const json = await resp.json();
   if (!json.success) throw new Error(json.error || 'Failed to fetch categories');
   return json.data;

@@ -20,11 +20,12 @@ const Categories: React.FC = () => {
     navigate(`/search?category=${encodeURIComponent(name)}${selectedStore ? `&store=${selectedStore}` : ''}`);
 
   useEffect(() => {
-    getCategories()
+    setLoading(true);
+    getCategories(selectedStore ?? undefined)
       .then(data => setCategories(data as unknown as Category[]))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedStore]);
 
   const featuredCategories = categories.slice(0, 4);
   const restCategories = categories.slice(4);

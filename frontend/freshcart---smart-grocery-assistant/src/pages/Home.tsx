@@ -79,7 +79,7 @@ const Home: React.FC = () => {
       try {
         const results = await Promise.allSettled([
           getDeals(DEALS_PAGE_SIZE, 0, selectedStore ?? undefined),
-          getCategories(),
+          getCategories(selectedStore ?? undefined),
           getHistoricLows(5)
         ]);
 

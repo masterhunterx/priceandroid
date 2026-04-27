@@ -162,18 +162,23 @@ def _normalize_category(raw: str) -> str:
 
 
 @router.get("/categories", response_model=UnifiedResponse)
-def list_categories():
+def list_categories(
+    store: Optional[str] = Query(None, description="Filtrar por slug de tienda"),
+):
     """
     Lista categorías normalizadas agrupando las variantes de cada tienda.
-    Devuelve nombre canónico, emoji, color y conteo total de productos.
+    Devuelve nombre canónico, emoji, color y conteo de productos en stock.
+    Acepta ?store=jumbo para mostrar solo los conteos de esa tienda.
     """
     with get_session() as session:
-        rows = (
+        q = (
             session.query(StoreProduct.top_category, func.count(StoreProduct.id))
             .filter(StoreProduct.top_category.isnot(None), StoreProduct.top_category != "")
-            .group_by(StoreProduct.top_category)
-            .all()
+            .filter(StoreProduct.in_stock == True)
         )
+        if store:
+            q = q.join(Store, Store.id == StoreProduct.store_id).filter(Store.slug == store)
+        rows = q.group_by(StoreProduct.top_category).all()
 
     # Agrupar por categoría normalizada
     counts: dict[str, int] = {}
