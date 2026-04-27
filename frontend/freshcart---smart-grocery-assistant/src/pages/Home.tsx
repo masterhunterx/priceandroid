@@ -83,8 +83,8 @@ const Home: React.FC = () => {
             : apiDeals;
           setDeals(filtered);
 
-          // Si no hay ofertas para esta tienda, mostrar productos de primera necesidad
-          if (filtered.length === 0 && selectedStore) {
+          // Si hay pocas ofertas para esta tienda, complementar con productos populares
+          if (filtered.length < 5 && selectedStore) {
             try {
               const { results: ess } = await searchProducts('', undefined, 1, 12, 'price_asc', selectedStore);
               setEssentialProducts(ess);
@@ -241,72 +241,73 @@ const Home: React.FC = () => {
                   <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"></div>
                 </div>
               </div>
-            ) : deals.length > 0 ? (
-              deals.map((deal) => (
-                <div
-                  key={`${deal.product_id}-${deal.store_slug}`}
-                  onClick={() => navigate(`/product/${deal.product_id}`)}
-                  className="flex-none w-48 bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
-                >
-                  <div className="relative h-32 w-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-                    {deal.discount_percent && (
-                      <div className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                        -{Math.round(deal.discount_percent)}%
-                      </div>
-                    )}
-                    <div className="absolute top-2 right-2 z-10 size-6 overflow-hidden">
-                      <StoreLogo slug={deal.store_slug} name={deal.store_name} className="size-full shadow-sm" />
-                    </div>
-                    <img src={deal.image_url} alt={deal.product_name} className="size-full object-contain p-4 group-hover:scale-110 transition-transform" />
-                  </div>
-                  <div className="p-3">
-                    <h4 className="text-slate-900 dark:text-white text-sm font-bold truncate">{deal.product_name}</h4>
-                    <p className="text-slate-500 text-[10px] mt-1">{deal.store_name} • {deal.brand}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-primary text-lg font-bold">{formatCurrency(deal.price)}</span>
-                      {deal.list_price && (
-                        <span className="text-slate-400 text-xs line-through">{formatCurrency(deal.list_price)}</span>
-                      )}
-                    </div>
-                    <button className="w-full mt-3 bg-primary hover:bg-primary/90 text-background-dark text-xs font-bold py-2 rounded-lg transition-colors">
-                      Ver Comparación
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : essentialProducts.length > 0 ? (
-              essentialProducts.map((product) => {
-                const storePrice = product.prices?.find(p => p.store_slug === selectedStore);
-                const price = storePrice?.price ?? product.best_price;
-                const listPrice = storePrice?.list_price;
-                return (
+            ) : (deals.length > 0 || essentialProducts.length > 0) ? (
+              <>
+                {deals.map((deal) => (
                   <div
-                    key={product.id}
-                    onClick={() => navigate(`/product/${product.id}`)}
-                    className="flex-none w-44 bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+                    key={`${deal.product_id}-${deal.store_slug}`}
+                    onClick={() => navigate(`/product/${deal.product_id}`)}
+                    className="flex-none w-48 bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
                   >
-                    <div className="relative h-28 w-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-                      <img
-                        src={product.image_url || ''}
-                        alt={product.name}
-                        className="size-full object-contain p-3 group-hover:scale-110 transition-transform"
-                      />
+                    <div className="relative h-32 w-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+                      {deal.discount_percent && (
+                        <div className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                          -{Math.round(deal.discount_percent)}%
+                        </div>
+                      )}
+                      <div className="absolute top-2 right-2 z-10 size-6 overflow-hidden">
+                        <StoreLogo slug={deal.store_slug} name={deal.store_name} className="size-full shadow-sm" />
+                      </div>
+                      <img src={deal.image_url} alt={deal.product_name} className="size-full object-contain p-4 group-hover:scale-110 transition-transform" />
                     </div>
                     <div className="p-3">
-                      <h4 className="text-slate-900 dark:text-white text-xs font-bold leading-tight line-clamp-2 mb-1">{product.name}</h4>
-                      {product.brand && <p className="text-slate-400 text-[10px] truncate">{product.brand}</p>}
-                      <div className="flex items-center gap-1.5 mt-2">
-                        <span style={{ color: 'var(--store-primary)' }} className="text-base font-bold">
-                          {price !== null ? formatCurrency(price) : '—'}
-                        </span>
-                        {listPrice && listPrice > (price ?? 0) && (
-                          <span className="text-slate-400 text-[10px] line-through">{formatCurrency(listPrice)}</span>
+                      <h4 className="text-slate-900 dark:text-white text-sm font-bold truncate">{deal.product_name}</h4>
+                      <p className="text-slate-500 text-[10px] mt-1">{deal.store_name} • {deal.brand}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-primary text-lg font-bold">{formatCurrency(deal.price)}</span>
+                        {deal.list_price && (
+                          <span className="text-slate-400 text-xs line-through">{formatCurrency(deal.list_price)}</span>
                         )}
                       </div>
+                      <button className="w-full mt-3 bg-primary hover:bg-primary/90 text-background-dark text-xs font-bold py-2 rounded-lg transition-colors">
+                        Ver Comparación
+                      </button>
                     </div>
                   </div>
-                );
-              })
+                ))}
+                {essentialProducts.map((product) => {
+                  const storePrice = product.prices?.find(p => p.store_slug === selectedStore);
+                  const price = storePrice?.price ?? product.best_price;
+                  const listPrice = storePrice?.list_price;
+                  return (
+                    <div
+                      key={`ess-${product.id}`}
+                      onClick={() => navigate(`/product/${product.id}`)}
+                      className="flex-none w-44 bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+                    >
+                      <div className="relative h-28 w-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+                        <img
+                          src={product.image_url || ''}
+                          alt={product.name}
+                          className="size-full object-contain p-3 group-hover:scale-110 transition-transform"
+                        />
+                      </div>
+                      <div className="p-3">
+                        <h4 className="text-slate-900 dark:text-white text-xs font-bold leading-tight line-clamp-2 mb-1">{product.name}</h4>
+                        {product.brand && <p className="text-slate-400 text-[10px] truncate">{product.brand}</p>}
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <span style={{ color: 'var(--store-primary)' }} className="text-base font-bold">
+                            {price !== null ? formatCurrency(price) : '—'}
+                          </span>
+                          {listPrice && listPrice > (price ?? 0) && (
+                            <span className="text-slate-400 text-[10px] line-through">{formatCurrency(listPrice)}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
             ) : (
               <div className="text-center py-8 w-full">
                 <span className="material-symbols-outlined text-slate-300 text-[40px]">local_offer</span>

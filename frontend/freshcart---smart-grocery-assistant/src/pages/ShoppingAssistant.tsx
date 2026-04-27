@@ -325,7 +325,7 @@ const MealPlanScroll: React.FC<{
 // ── Main Component ─────────────────────────────────────────────────────────────
 const ShoppingAssistant: React.FC = () => {
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+  const { addItem } = useCart();
 
   const [messages, setMessages]         = useState<Message[]>([]);
   const [input, setInput]               = useState('');
@@ -343,7 +343,17 @@ const ShoppingAssistant: React.FC = () => {
   }, []);
 
   const handleAddToCart = (plan: MealPlanStore) => {
-    addToCart(plan);
+    plan.items.filter(i => i.status === 'found').forEach(item => {
+      addItem({
+        product_id: `${plan.store_slug}-${item.query}`,
+        name: item.name,
+        brand: item.brand || '',
+        image_url: item.image_url || '',
+        price: item.price || 0,
+        store_slug: plan.store_slug,
+        store_name: plan.store,
+      });
+    });
     setSelectedPlan(null);
     toast.success(`Plan de ${plan.store} guardado en tu carro`, { duration: 2500 });
     navigate('/cart');

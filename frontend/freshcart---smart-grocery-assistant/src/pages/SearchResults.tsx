@@ -13,6 +13,7 @@ import {
 import { Product, SearchSuggestion } from '../types';
 import StoreLogo from '../components/StoreLogo';
 import { useLocation } from '../context/LocationContext';
+import { useCart } from '../context/CartContext';
 
 const STORES = ['jumbo', 'lider', 'unimarc', 'santa_isabel'] as const;
 const STORE_LABELS: Record<string, string> = {
@@ -45,7 +46,7 @@ const SearchResults: React.FC = () => {
   const [searchError, setSearchError] = useState(false);
   const [sort, setSort]             = useState('price_asc');
   const [store, setStore]           = useState(storeParam || selectedStore || '');
-  const [favoritingId, setFavoritingId] = useState<number | string | null>(null);
+  const { addItem, removeItem, isInCart } = useCart();
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Autocomplete
@@ -83,20 +84,22 @@ const SearchResults: React.FC = () => {
     });
   };
 
-  const handleToggleFavorite = async (e: React.MouseEvent, product: Product) => {
+  const handleToggleCart = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
-    if (favoritingId === product.id) return;
-    setFavoritingId(product.id);
-    try {
-      const res = await toggleFavorite(product.id);
-      setResults(prev =>
-        prev.map(p => p.id === product.id ? { ...p, is_favorite: res.is_favorite } : p)
-      );
-    } catch {
-      // silenciar errores de red
-    } finally {
-      setFavoritingId(null);
+    if (isInCart(product.id)) {
+      removeItem(product.id);
+    } else {
+      addItem({
+        product_id: product.id,
+        name: product.name,
+        brand: product.brand || '',
+        image_url: product.image_url || '',
+        price: product.best_price || 0,
+        store_slug: product.best_store_slug || '',
+        store_name: product.best_store || '',
+      });
     }
+    toggleFavorite(product.id).catch(() => {});
   };
 
   // Resetear página cuando cambian los filtros
@@ -481,15 +484,14 @@ const SearchResults: React.FC = () => {
                     <span className="truncate">Ver precios</span>
                   </button>
                   <button
-                    onClick={e => handleToggleFavorite(e, product)}
-                    disabled={favoritingId === product.id}
+                    onClick={e => handleToggleCart(e, product)}
                     className={`flex w-10 items-center justify-center rounded-lg h-10 active:scale-95 transition-all ${
-                      product.is_favorite
+                      isInCart(product.id)
                         ? 'bg-red-100 dark:bg-red-900/30 text-red-500'
                         : 'bg-slate-100 dark:bg-[#28392f] text-slate-400 dark:text-slate-500'
                     }`}
                   >
-                    <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: product.is_favorite ? "'FILL' 1" : "'FILL' 0" }}>
+                    <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: isInCart(product.id) ? "'FILL' 1" : "'FILL' 0" }}>
                       favorite
                     </span>
                   </button>

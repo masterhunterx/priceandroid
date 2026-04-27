@@ -6,6 +6,7 @@ import { Product, PricePoint } from '../types';
 import StoreLogo from '../components/StoreLogo';
 import { toast } from 'react-hot-toast';
 import { useLocation } from '../context/LocationContext';
+import { useCart } from '../context/CartContext';
 
 /** Genera URL de búsqueda en la tienda usando solo palabras clave del nombre */
 function buildStoreSearchUrl(storeSlug: string, productName: string): string {
@@ -30,6 +31,7 @@ const ProductDetails: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { getBranchContext } = useLocation();
+  const { addItem, removeItem, isInCart } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -98,19 +100,9 @@ const ProductDetails: React.FC = () => {
     return date.toLocaleDateString();
   };
 
-  const handleToggleFavorite = async () => {
+  const handleToggleFavorite = () => {
     if (!product) return;
-    try {
-      const result = await toggleFavorite(product.id);
-      setProduct({ ...product, is_favorite: result.is_favorite });
-      toast.success(result.message, {
-        icon: result.is_favorite ? '🧡' : '💔',
-        style: { borderRadius: '10px', background: '#333', color: '#fff' },
-      });
-    } catch (error) {
-      console.error('Error toggling favorite:', error);
-      toast.error('Error al guardar favorito');
-    }
+    handleAddToCart();
   };
 
   const handleShare = async () => {
@@ -133,20 +125,25 @@ const ProductDetails: React.FC = () => {
     }
   };
 
-  const handleAddToList = () => {
+  const handleAddToCart = () => {
     if (!product) return;
-    try {
-      const list: { id: number | string; name: string; price: number | null }[] =
-        JSON.parse(localStorage.getItem('freshcart_shopping_list') || '[]');
-      if (!list.find(item => item.id === product.id)) {
-        list.push({ id: product.id, name: product.name, price: product.best_price });
-        localStorage.setItem('freshcart_shopping_list', JSON.stringify(list));
-      }
-    } catch { /* ignore */ }
-    toast.success('Producto añadido a tu lista de compras', {
-      icon: '🛒',
-      style: { borderRadius: '10px', background: '#333', color: '#fff' },
-    });
+    if (isInCart(product.id)) {
+      removeItem(product.id);
+      toast('Eliminado del carro', { icon: '🗑️', style: { borderRadius: '10px', background: '#333', color: '#fff' } });
+    } else {
+      const bestPricePoint = product.prices.find(p => p.in_stock && p.price === product.best_price);
+      addItem({
+        product_id: product.id,
+        name: product.name,
+        brand: product.brand || '',
+        image_url: product.image_url || '',
+        price: product.best_price || 0,
+        store_slug: bestPricePoint?.store_slug || '',
+        store_name: product.best_store || bestPricePoint?.store_name || '',
+      });
+      toast.success('Agregado al carro', { icon: '🛒', style: { borderRadius: '10px', background: '#333', color: '#fff' } });
+    }
+    toggleFavorite(product.id).catch(() => {});
   };
 
   if (loading) {
@@ -191,15 +188,15 @@ const ProductDetails: React.FC = () => {
           </div>
           <h2 className="text-lg font-bold flex-1 text-center">Detalle del Producto</h2>
           <div className="flex w-12 items-center justify-end">
-            <button 
+            <button
               onClick={handleToggleFavorite}
               className={`flex size-10 items-center justify-center rounded-full transition-all active:scale-90 ${
-                product.is_favorite 
-                ? 'bg-red-500/10 text-red-500' 
+                isInCart(product.id)
+                ? 'bg-red-500/10 text-red-500'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
               }`}
             >
-              <span className={`material-symbols-outlined text-2xl ${product.is_favorite ? 'fill-1' : ''}`}>
+              <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: isInCart(product.id) ? "'FILL' 1" : "'FILL' 0" }}>
                 favorite
               </span>
             </button>
@@ -542,7 +539,7 @@ const ProductDetails: React.FC = () => {
                           // VTEX stores (Jumbo, Santa Isabel) bloquean URLs directas con Cloudflare
                           const blocksDirectAccess = slug === 'jumbo' || slug === 'santaisabel';
                           if (blocksDirectAccess) {
-                            const q = encodeURIComponent(`${product.name} ${pricePoint.store}`);
+                            const q = encodeURIComponent(`${product.name} ${pricePoint.store_name}`);
                             return (
                               <a
                                 href={`https://www.google.com/search?q=${q}`}
@@ -583,15 +580,21 @@ const ProductDetails: React.FC = () => {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-[#102217]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-md mx-auto flex items-center gap-4">
           <div className="flex flex-col">
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Precio Recomendado</span>
+            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Mejor Precio</span>
             <span className="text-2xl font-bold text-primary">{formatCurrency(product.best_price)}</span>
           </div>
-          <button 
-            onClick={handleAddToList}
-            className="flex-1 bg-primary text-background-dark font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all"
+          <button
+            onClick={handleAddToCart}
+            className={`flex-1 font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all ${
+              isInCart(product.id)
+                ? 'bg-red-500 text-white shadow-red-500/20'
+                : 'bg-primary text-background-dark shadow-primary/20'
+            }`}
           >
-             <span className="material-symbols-outlined">shopping_basket</span>
-             Añadir a lista
+            <span className="material-symbols-outlined">
+              {isInCart(product.id) ? 'remove_shopping_cart' : 'add_shopping_cart'}
+            </span>
+            {isInCart(product.id) ? 'Quitar del carro' : 'Agregar al carro'}
           </button>
         </div>
       </div>

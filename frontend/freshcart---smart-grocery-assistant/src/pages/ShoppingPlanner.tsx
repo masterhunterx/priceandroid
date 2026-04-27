@@ -57,7 +57,7 @@ const ShoppingPlanner: React.FC = () => {
         qty: 1
       }));
       const data = await optimizeCart(items);
-      if (!data || !data.items) {
+      if (!data || !data.strategy) {
         throw new Error('Respuesta del servidor inválida');
       }
       setResult(data);

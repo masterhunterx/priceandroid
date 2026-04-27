@@ -1,82 +1,92 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 export interface CartItem {
-  sp_id: number;
+  product_id: string | number;
   name: string;
   brand: string;
-  price: number;
-  store: string;
-  store_slug: string;
   image_url: string;
-  qty: number;
-  total: number;
-  status: 'found' | 'not_found';
-  query?: string;
-}
-
-export interface SavedCart {
-  store: string;
+  price: number;
   store_slug: string;
-  emoji: string;
-  items: CartItem[];
-  total_cost: number;
-  added_at: string;
+  store_name: string;
+  qty: number;
 }
 
 interface CartContextType {
-  cart: SavedCart | null;
+  items: CartItem[];
   itemCount: number;
-  addToCart: (plan: any) => void;
+  total: number;
+  addItem: (item: Omit<CartItem, 'qty'>) => void;
+  removeItem: (product_id: string | number) => void;
+  updateQty: (product_id: string | number, delta: number) => void;
   clearCart: () => void;
+  isInCart: (product_id: string | number) => boolean;
 }
 
 const CartContext = createContext<CartContextType>({
-  cart: null,
+  items: [],
   itemCount: 0,
-  addToCart: () => {},
+  total: 0,
+  addItem: () => {},
+  removeItem: () => {},
+  updateQty: () => {},
   clearCart: () => {},
+  isInCart: () => false,
 });
 
 export const useCart = () => useContext(CartContext);
 
-const CART_KEY = 'freshcart_kairos_cart';
+const CART_KEY = 'freshcart_cart_v2';
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [cart, setCart] = useState<SavedCart | null>(() => {
+  const [items, setItems] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem(CART_KEY);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
   });
 
   useEffect(() => {
-    if (cart) {
-      localStorage.setItem(CART_KEY, JSON.stringify(cart));
-    } else {
-      localStorage.removeItem(CART_KEY);
-    }
-  }, [cart]);
+    try { localStorage.setItem(CART_KEY, JSON.stringify(items)); } catch {}
+  }, [items]);
 
-  const itemCount = cart ? cart.items.filter(i => i.status === 'found').length : 0;
+  const itemCount = items.length;
+  const total = items.reduce((s, i) => s + i.price * i.qty, 0);
 
-  const addToCart = (plan: any) => {
-    const newCart: SavedCart = {
-      store:      plan.store,
-      store_slug: plan.store_slug,
-      emoji:      plan.emoji,
-      items:      plan.items as CartItem[],
-      total_cost: plan.total_cost,
-      added_at:   new Date().toISOString(),
-    };
-    setCart(newCart);
-  };
+  const addItem = useCallback((item: Omit<CartItem, 'qty'>) => {
+    setItems(prev => {
+      const key = String(item.product_id);
+      const exists = prev.find(i => String(i.product_id) === key);
+      if (exists) {
+        return prev.map(i => String(i.product_id) === key ? { ...i, qty: i.qty + 1 } : i);
+      }
+      return [...prev, { ...item, qty: 1 }];
+    });
+  }, []);
 
-  const clearCart = () => setCart(null);
+  const removeItem = useCallback((product_id: string | number) => {
+    setItems(prev => prev.filter(i => String(i.product_id) !== String(product_id)));
+  }, []);
+
+  const updateQty = useCallback((product_id: string | number, delta: number) => {
+    setItems(prev =>
+      prev.flatMap(i => {
+        if (String(i.product_id) !== String(product_id)) return [i];
+        const newQty = i.qty + delta;
+        return newQty <= 0 ? [] : [{ ...i, qty: newQty }];
+      })
+    );
+  }, []);
+
+  const clearCart = useCallback(() => setItems([]), []);
+
+  const isInCart = useCallback(
+    (product_id: string | number) =>
+      items.some(i => String(i.product_id) === String(product_id)),
+    [items],
+  );
 
   return (
-    <CartContext.Provider value={{ cart, itemCount, addToCart, clearCart }}>
+    <CartContext.Provider value={{ items, itemCount, total, addItem, removeItem, updateQty, clearCart, isInCart }}>
       {children}
     </CartContext.Provider>
   );
