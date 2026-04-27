@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications } from '../lib/api';
-import { Deal, Category, Notification, Branch } from '../types';
+import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications, searchProducts } from '../lib/api';
+import { Deal, Category, Notification, Branch, Product } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface HistoricLow {
@@ -45,6 +45,7 @@ const Home: React.FC = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const username = getUsername();
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [essentialProducts, setEssentialProducts] = useState<Product[]>([]);
   const [historicLows, setHistoricLows] = useState<HistoricLow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -71,6 +72,7 @@ const Home: React.FC = () => {
   useEffect(() => {
     setDealsOffset(0);
     setDeals([]);
+    setEssentialProducts([]);
     setHistoricLows([]);
     setSearchingDeals(true);
     async function loadData() {
@@ -83,12 +85,20 @@ const Home: React.FC = () => {
 
         if (results[0].status === 'fulfilled') {
           const apiDeals = results[0].value;
-          // Guardia client-side: descartar cualquier deal de otra tienda por
-          // si el backend devuelve datos cacheados o el filtro falla.
-          setDeals(selectedStore
+          const filtered = selectedStore
             ? apiDeals.filter(d => d.store_slug === selectedStore)
-            : apiDeals
-          );
+            : apiDeals;
+          setDeals(filtered);
+
+          // Si no hay ofertas para esta tienda, mostrar productos de primera necesidad
+          if (filtered.length === 0 && selectedStore) {
+            try {
+              const { results: ess } = await searchProducts('', undefined, 1, 12, 'price_asc', selectedStore);
+              setEssentialProducts(ess);
+            } catch {
+              setEssentialProducts([]);
+            }
+          }
         }
         if (results[1].status === 'fulfilled') setCategories(results[1].value);
         if (results[2].status === 'fulfilled') setHistoricLows(results[2].value);
@@ -218,9 +228,11 @@ const Home: React.FC = () => {
               </div>
             )}
             <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">
-              {selectedStore && STORE_META[selectedStore]
-                ? `Ofertas en ${STORE_META[selectedStore].name}`
-                : 'Mejores Ofertas'}
+              {!searchingDeals && deals.length === 0 && essentialProducts.length > 0
+                ? `Productos en ${selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : 'la tienda'}`
+                : selectedStore && STORE_META[selectedStore]
+                  ? `Ofertas en ${STORE_META[selectedStore].name}`
+                  : 'Mejores Ofertas'}
             </h2>
           </div>
           <div className="flex items-center gap-2">
@@ -311,9 +323,11 @@ const Home: React.FC = () => {
         <section className="mt-4">
           <div className="flex items-center justify-between px-4 pb-4">
             <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">
-              {selectedStore && STORE_META[selectedStore]
-                ? `Ofertas en ${STORE_META[selectedStore].name}`
-                : 'Mejores Ofertas de Hoy'}
+              {!searchingDeals && deals.length === 0 && essentialProducts.length > 0
+                ? `Productos en ${selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : 'la tienda'}`
+                : selectedStore && STORE_META[selectedStore]
+                  ? `Ofertas en ${STORE_META[selectedStore].name}`
+                  : 'Mejores Ofertas de Hoy'}
             </h3>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 text-primary text-sm font-semibold">
@@ -385,13 +399,61 @@ const Home: React.FC = () => {
                   </div>
                 </div>
               ))
+            ) : essentialProducts.length > 0 ? (
+              essentialProducts.map((product) => {
+                const storePrice = product.prices?.find(p => p.store_slug === selectedStore);
+                const price = storePrice?.price ?? product.best_price;
+                const listPrice = storePrice?.list_price;
+                return (
+                  <div
+                    key={product.id}
+                    onClick={() => navigate(`/product/${product.id}`)}
+                    className="flex-none w-44 bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+                  >
+                    <div className="relative h-28 w-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+                      <img
+                        src={product.image_url || ''}
+                        alt={product.name}
+                        className="size-full object-contain p-3 group-hover:scale-110 transition-transform"
+                      />
+                    </div>
+                    <div className="p-3">
+                      <h4 className="text-slate-900 dark:text-white text-xs font-bold leading-tight line-clamp-2 mb-1">{product.name}</h4>
+                      {product.brand && <p className="text-slate-400 text-[10px] truncate">{product.brand}</p>}
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span style={{ color: 'var(--store-primary)' }} className="text-base font-bold">
+                          {price !== null ? formatCurrency(price) : '—'}
+                        </span>
+                        {listPrice && listPrice > (price ?? 0) && (
+                          <span className="text-slate-400 text-[10px] line-through">{formatCurrency(listPrice)}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
             ) : (
               <div className="text-center py-8 w-full">
-                <p className="text-slate-500 italic">No se encontraron ofertas hoy.</p>
+                <span className="material-symbols-outlined text-slate-300 text-[40px]">local_offer</span>
+                <p className="text-slate-500 text-sm mt-2">Sin ofertas registradas hoy.</p>
+                <button
+                  onClick={() => navigate(`/search?store=${selectedStore ?? ''}`)}
+                  className="mt-3 text-xs font-bold underline underline-offset-2"
+                  style={{ color: 'var(--store-primary)' }}
+                >
+                  Ver todos los productos →
+                </button>
               </div>
             )}
           </div>
         </section>
+
+        {/* Título de sección cuando muestra productos esenciales en vez de ofertas */}
+        {!searchingDeals && deals.length === 0 && essentialProducts.length > 0 && (
+          <p className="px-4 -mt-2 mb-2 text-xs text-slate-400 italic">
+            Sin ofertas registradas hoy — mostrando productos disponibles en {selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : 'la tienda'}.
+          </p>
+        )}
 
         {/* Historic Lows — filtrados por tienda activa */}
         {(() => {
