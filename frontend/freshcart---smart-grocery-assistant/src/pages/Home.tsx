@@ -69,6 +69,7 @@ const Home: React.FC = () => {
   };
 
   useEffect(() => {
+    setDealsOffset(0);
     async function loadData() {
       try {
         const results = await Promise.allSettled([

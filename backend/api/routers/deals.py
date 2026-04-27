@@ -224,7 +224,7 @@ def list_deals(
         seen_products = set()
         all_deals = []
 
-        for sp, price, store in discounted:
+        for sp, price, store_obj in discounted:
             if sp.id in seen_products: continue
             seen_products.add(sp.id)
 
@@ -242,9 +242,9 @@ def list_deals(
                 brand=sp.brand or "",
                 category=sp.top_category or "",
                 image_url=sp.image_url or "",
-                store_name=store.name,
-                store_slug=store.slug,
-                store_logo=store.logo_url or "",
+                store_name=store_obj.name,
+                store_slug=store_obj.slug,
+                store_logo=store_obj.logo_url or "",
                 price=price.price,
                 current_price=price.price,
                 list_price=price.list_price,

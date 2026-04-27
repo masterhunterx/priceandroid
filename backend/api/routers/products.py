@@ -6,10 +6,13 @@ Soporta búsqueda resiliente y optimización de consultas SQL (joinedload).
 """
 
 import json
+import logging
 import re
 import time
 import threading
 import unicodedata
+
+logger = logging.getLogger("FreshCartAPI")
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Header, BackgroundTasks, Depends
 from core.db import get_session

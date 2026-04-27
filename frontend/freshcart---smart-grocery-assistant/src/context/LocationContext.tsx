@@ -74,6 +74,8 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
         try { setSelectedBranches(JSON.parse(e.newValue)); } catch { setSelectedBranches({}); }
       } else if (e.key === 'user_location_name') {
         setSelectedLocationName(e.newValue);
+      } else if (e.key === 'selected_store') {
+        setSelectedStoreState(e.newValue);
       }
     };
     window.addEventListener('storage', handleStorage);
