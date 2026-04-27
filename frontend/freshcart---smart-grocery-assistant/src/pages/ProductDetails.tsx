@@ -533,40 +533,17 @@ const ProductDetails: React.FC = () => {
                           <span className="material-symbols-outlined text-[13px]">search</span>
                           Buscar en tienda
                         </a>
-                        {/* Link directo o Google según si la tienda bloquea acceso directo */}
-                        {pricePoint.product_url && (() => {
-                          const slug = (pricePoint.store_slug ?? '').toLowerCase().replace(/[-_]/g, '');
-                          // VTEX stores (Jumbo, Santa Isabel) bloquean URLs directas con Cloudflare
-                          const blocksDirectAccess = slug === 'jumbo' || slug === 'santaisabel';
-                          if (blocksDirectAccess) {
-                            const q = encodeURIComponent(`${product.name} ${pricePoint.store_name}`);
-                            return (
-                              <a
-                                href={`https://www.google.com/search?q=${q}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
-                              >
-                                <span className="material-symbols-outlined text-[13px]">search</span>
-                                Google
-                              </a>
-                            );
-                          }
-                          const safeUrl = pricePoint.product_url.startsWith('http')
-                            ? pricePoint.product_url
-                            : `https://${pricePoint.product_url}`;
-                          return (
-                            <a
-                              href={safeUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
-                            >
-                              <span className="material-symbols-outlined text-[13px]">open_in_new</span>
-                              Directo
-                            </a>
-                          );
-                        })()}
+                        {pricePoint.product_url && (
+                          <a
+                            href={pricePoint.product_url.startsWith('http') ? pricePoint.product_url : `https://${pricePoint.product_url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                            Ver producto
+                          </a>
+                        )}
                       </div>
                     )}
                   </div>
