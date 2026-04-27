@@ -32,6 +32,7 @@ from ..utils import (
     analyze_promo,
 )
 from ..middleware import get_api_key
+from .deals import _CATEGORY_MAP as _CAT_MAP
 
 router = APIRouter(
     prefix="/api/products",
@@ -147,10 +148,8 @@ def search_products(
             main_query = main_query.filter(StoreProduct.in_stock == in_stock)
 
         if category:
-            from .deals import _CATEGORY_MAP
-            cat_entry = next((c for c in _CATEGORY_MAP if c['name'].lower() == category.strip().lower()), None)
+            cat_entry = next((c for c in _CAT_MAP if c['name'].lower() == category.strip().lower()), None)
             if cat_entry:
-                # Usar los keywords canónicos para hacer match con los valores raw del scraper
                 kw_conditions = [
                     func.lower(StoreProduct.top_category).like(f"%{kw}%")
                     for kw in cat_entry['keywords']
