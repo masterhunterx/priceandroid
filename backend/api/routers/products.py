@@ -32,7 +32,6 @@ from ..utils import (
     analyze_promo,
 )
 from ..middleware import get_api_key
-from .deals import _CATEGORY_MAP as _CAT_MAP
 
 router = APIRouter(
     prefix="/api/products",
@@ -148,22 +147,26 @@ def search_products(
             main_query = main_query.filter(StoreProduct.in_stock == in_stock)
 
         if category:
-            cat_entry = next((c for c in _CAT_MAP if c['name'].lower() == category.strip().lower()), None)
-            if cat_entry:
-                kw_conditions = [
-                    func.lower(StoreProduct.top_category).like(f"%{kw}%")
-                    for kw in cat_entry['keywords']
-                ] + [
-                    func.lower(StoreProduct.category_path).like(f"%{kw}%")
-                    for kw in cat_entry['keywords']
-                ]
-                main_query = main_query.filter(or_(*kw_conditions))
-            else:
-                cat_esc = category.lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
-                main_query = main_query.filter(
-                    (func.lower(StoreProduct.top_category).like(f"%{cat_esc}%", escape='\\')) |
-                    (func.lower(StoreProduct.category_path).like(f"%{cat_esc}%", escape='\\'))
-                )
+            _STOP = {'y', 'de', 'del', 'la', 'las', 'el', 'los', 'a', 'e'}
+            cat_lower = category.strip().lower()
+            cat_esc = cat_lower.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+            # Palabras significativas del nombre canónico (sin stopwords, mín 3 chars)
+            sig_words = [
+                w.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+                for w in cat_lower.split()
+                if w not in _STOP and len(w) >= 3
+            ]
+            conditions = [
+                func.lower(StoreProduct.top_category).like(f"%{cat_esc}%", escape='\\'),
+                func.lower(StoreProduct.category_path).like(f"%{cat_esc}%", escape='\\'),
+            ] + [
+                func.lower(StoreProduct.top_category).like(f"%{w}%", escape='\\')
+                for w in sig_words
+            ] + [
+                func.lower(StoreProduct.category_path).like(f"%{w}%", escape='\\')
+                for w in sig_words
+            ]
+            main_query = main_query.filter(or_(*conditions))
             
         if store:
             main_query = main_query.filter(StoreProduct.store.has(slug=store))
