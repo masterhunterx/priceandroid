@@ -94,9 +94,11 @@ def get_stock_status():
         in_stk  = session.query(func.count(StoreProduct.id)).filter(StoreProduct.in_stock == True).scalar()
         oos     = total - in_stk
 
-        # Cuántos productos no se han sincronizado en las últimas 48h
+        # Cuántos productos EN STOCK no se han sincronizado en las últimas 48h
+        # (excluimos in_stock=False: el SelfHealer ya los gestiona y no necesitan sync urgente)
         cutoff  = datetime.now(UTC) - timedelta(hours=48)
         stale   = session.query(func.count(StoreProduct.id)).filter(
+            StoreProduct.in_stock == True,
             (StoreProduct.last_sync == None) | (StoreProduct.last_sync < cutoff)
         ).scalar()
 

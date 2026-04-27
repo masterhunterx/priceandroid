@@ -38,8 +38,17 @@ def fluxengine_sentry_loop():
                 random.shuffle(target_ids)
 
                 if not target_ids:
-                    random_probs = session.query(StoreProduct).order_by(StoreProduct.last_sync.asc()).limit(5).all()
-                    for sp in random_probs:
+                    from core.circuit_breaker import is_open as _cb_is_open
+                    random_probs = (
+                        session.query(StoreProduct)
+                        .filter(StoreProduct.in_stock == True)
+                        .order_by(StoreProduct.last_sync.asc().nullsfirst())
+                        .limit(20)
+                        .all()
+                    )
+                    for sp in random_probs[:5]:
+                        if _cb_is_open(sp.store.slug):
+                            continue
                         logger.debug(f"Sentry [Audit Extra]: Revisando {sp.name}...")
                         sync_single_store_product(session, sp.id)
                 else:
