@@ -47,6 +47,7 @@ const SearchResults: React.FC = () => {
   const [sort, setSort]             = useState('price_asc');
   const [store, setStore]           = useState(storeParam || selectedStore || '');
   const { addItem, removeItem, isInCart } = useCart();
+  const [favoritingId, setFavoritingId] = useState<number | string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Autocomplete
@@ -99,7 +100,22 @@ const SearchResults: React.FC = () => {
         store_name: product.best_store || '',
       });
     }
-    toggleFavorite(product.id).catch(() => {});
+  };
+
+  const handleToggleFavorite = async (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    if (favoritingId === product.id) return;
+    setFavoritingId(product.id);
+    try {
+      const res = await toggleFavorite(product.id);
+      setResults(prev =>
+        prev.map(p => p.id === product.id ? { ...p, is_favorite: res.is_favorite } : p)
+      );
+    } catch {
+      // silenciar errores de red
+    } finally {
+      setFavoritingId(null);
+    }
   };
 
   // Resetear página cuando cambian los filtros
@@ -478,20 +494,37 @@ const SearchResults: React.FC = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={e => { e.stopPropagation(); navigate(`/product/${product.id}`); }}
-                    className="flex-1 flex items-center justify-center rounded-lg h-10 bg-primary text-background-dark gap-2 text-sm font-bold shadow-md shadow-primary/10 active:scale-95 transition-all"
+                    className="flex-1 flex items-center justify-center rounded-lg h-10 bg-primary text-background-dark gap-1.5 text-sm font-bold shadow-md shadow-primary/10 active:scale-95 transition-all"
                   >
-                    <span className="material-symbols-outlined text-[20px]">equalizer</span>
+                    <span className="material-symbols-outlined text-[18px]">equalizer</span>
                     <span className="truncate">Ver precios</span>
                   </button>
+                  {/* Botón carro */}
                   <button
                     onClick={e => handleToggleCart(e, product)}
+                    title={isInCart(product.id) ? 'Quitar del carro' : 'Agregar al carro'}
                     className={`flex w-10 items-center justify-center rounded-lg h-10 active:scale-95 transition-all ${
                       isInCart(product.id)
-                        ? 'bg-red-100 dark:bg-red-900/30 text-red-500'
+                        ? 'bg-primary/15 text-primary'
                         : 'bg-slate-100 dark:bg-[#28392f] text-slate-400 dark:text-slate-500'
                     }`}
                   >
                     <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: isInCart(product.id) ? "'FILL' 1" : "'FILL' 0" }}>
+                      {isInCart(product.id) ? 'remove_shopping_cart' : 'add_shopping_cart'}
+                    </span>
+                  </button>
+                  {/* Botón favorito */}
+                  <button
+                    onClick={e => handleToggleFavorite(e, product)}
+                    disabled={favoritingId === product.id}
+                    title={product.is_favorite ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+                    className={`flex w-10 items-center justify-center rounded-lg h-10 active:scale-95 transition-all ${
+                      product.is_favorite
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-500'
+                        : 'bg-slate-100 dark:bg-[#28392f] text-slate-400 dark:text-slate-500'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: product.is_favorite ? "'FILL' 1" : "'FILL' 0" }}>
                       favorite
                     </span>
                   </button>
