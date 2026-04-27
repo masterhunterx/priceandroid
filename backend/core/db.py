@@ -150,7 +150,7 @@ def _apply_migrations(engine):
     Cada entrada es (tabla, columna, tipo, default_sql). Seguro ejecutar varias veces.
     """
     import logging as _logging
-    _mig_log = _logging.getLogger("AntigravityAPI")
+    _mig_log = _logging.getLogger("FreshCartAPI")
 
     # (table, column, type, default_value_sql)
     migrations = [

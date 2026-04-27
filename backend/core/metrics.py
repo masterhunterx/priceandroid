@@ -7,7 +7,7 @@ Expone métricas de negocio y salud del sistema para Grafana Cloud.
 import logging
 from prometheus_client import Counter, Gauge, Histogram, Info
 
-_logger = logging.getLogger("AntigravityAPI")
+_logger = logging.getLogger("FreshCartAPI")
 
 # ── Info del sistema ───────────────────────────────────────────────────────────
 app_info = Info("freshcart_app", "Información de la aplicación FreshCart")

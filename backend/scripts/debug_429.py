@@ -10,7 +10,7 @@ async def hit(client, i):
     return True
 
 async def main():
-    headers = {"X-API-Key": "antigravity_dev_key"}
+    headers = {"X-API-Key": "freshcart_dev_key"}
     async with httpx.AsyncClient(base_url="http://127.0.0.1:8000", headers=headers) as client:
         tasks = []
         for i in range(50):

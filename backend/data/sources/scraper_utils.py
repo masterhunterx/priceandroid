@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Callable
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 # ── Constantes comunes ─────────────────────────────────────────────────────────
 MAX_FALLBACKS = 5         # máximo de fallbacks AI por sesión de scraping

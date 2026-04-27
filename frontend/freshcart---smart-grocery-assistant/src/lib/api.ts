@@ -134,8 +134,10 @@ export async function getProductDetails(id: number, branchContext?: Record<strin
   return json.data;
 }
 
-export async function getDeals(limit = 20, offset = 0): Promise<Deal[]> {
-  const resp = await fetchWithAuth(`${API_BASE_URL}/deals?limit=${limit}&offset=${offset}`, { headers: getHeaders() });
+export async function getDeals(limit = 20, offset = 0, store?: string): Promise<Deal[]> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (store) params.set('store', store);
+  const resp = await fetchWithAuth(`${API_BASE_URL}/deals?${params}`, { headers: getHeaders() });
   const json = await resp.json();
   if (!json.success) throw new Error(json.error || 'Failed to fetch deals');
   return json.data;

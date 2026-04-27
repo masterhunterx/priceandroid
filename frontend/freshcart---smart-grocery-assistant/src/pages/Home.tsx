@@ -19,6 +19,13 @@ import { useLocation } from '../context/LocationContext';
 import { useTheme } from '../context/ThemeContext';
 import LocationSelector from '../components/LocationSelector';
 
+const STORE_META: Record<string, { name: string; color: string }> = {
+  jumbo:        { name: 'Jumbo',        color: '#00a650' },
+  santa_isabel: { name: 'Santa Isabel', color: '#e30613' },
+  lider:        { name: 'Líder',        color: '#0071ce' },
+  unimarc:      { name: 'Unimarc',      color: '#da291c' },
+};
+
 function getUsername(): string {
   try {
     const token = localStorage.getItem('freshcart_access_token');
@@ -30,7 +37,7 @@ function getUsername(): string {
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const { coords, selectedBranches } = useLocation();
+  const { coords, selectedBranches, selectedStore, setSelectedStore } = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { logout } = useAuth();
   const [isLocationOpen, setIsLocationOpen] = useState(false);
@@ -65,7 +72,7 @@ const Home: React.FC = () => {
     async function loadData() {
       try {
         const results = await Promise.allSettled([
-          getDeals(DEALS_PAGE_SIZE, 0),
+          getDeals(DEALS_PAGE_SIZE, 0, selectedStore ?? undefined),
           getCategories(),
           getHistoricLows(5)
         ]);
@@ -81,21 +88,20 @@ const Home: React.FC = () => {
       }
     }
     loadData();
-  }, []);
+  }, [selectedStore]);
 
   const handleRefreshDeals = async () => {
     if (refreshingDeals) return;
     setRefreshingDeals(true);
     try {
       const nextOffset = dealsOffset + DEALS_PAGE_SIZE;
-      const newDeals = await getDeals(DEALS_PAGE_SIZE, nextOffset);
+      const newDeals = await getDeals(DEALS_PAGE_SIZE, nextOffset, selectedStore ?? undefined);
       if (newDeals.length > 0) {
         setDeals(newDeals);
         setDealsOffset(nextOffset);
       } else {
-        // Wrapping around: trigger KAIROS engine for fresh data, then reload from start
         refreshNotifications().catch(() => {});
-        const firstPage = await getDeals(DEALS_PAGE_SIZE, 0);
+        const firstPage = await getDeals(DEALS_PAGE_SIZE, 0, selectedStore ?? undefined);
         setDeals(firstPage);
         setDealsOffset(0);
       }
@@ -159,11 +165,41 @@ const Home: React.FC = () => {
             )}
           </div>
           <div className="flex-1 px-3">
-             <div className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-primary text-[16px]">location_on</span>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Chile</p>
-            </div>
-            <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">Comprador Inteligente</h2>
+            {selectedStore && STORE_META[selectedStore] ? (
+              <div className="flex items-center gap-1.5">
+                <div
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: STORE_META[selectedStore].color }}
+                />
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
+                  {STORE_META[selectedStore].name}
+                </p>
+                <button
+                  onClick={() => navigate('/store-select')}
+                  className="ml-1 text-[9px] text-primary font-bold uppercase tracking-wider underline underline-offset-2"
+                >
+                  cambiar
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-primary text-[16px]">store</span>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
+                  Todas las tiendas
+                  <button
+                    onClick={() => navigate('/store-select')}
+                    className="ml-2 text-primary underline underline-offset-2"
+                  >
+                    cambiar
+                  </button>
+                </p>
+              </div>
+            )}
+            <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">
+              {selectedStore && STORE_META[selectedStore]
+                ? `Ofertas en ${STORE_META[selectedStore].name}`
+                : 'Mejores Ofertas'}
+            </h2>
           </div>
           <div className="flex items-center gap-2">
             <button 
@@ -193,7 +229,7 @@ const Home: React.FC = () => {
             onSubmit={(e) => {
               e.preventDefault();
               const q = (e.currentTarget.elements.namedItem('search') as HTMLInputElement).value;
-              if (q) navigate(`/search?q=${q}`);
+              if (q) navigate(`/search?q=${q}${selectedStore ? `&store=${selectedStore}` : ''}`);
             }}
             data-tour="search"
             className="flex w-full items-stretch rounded-xl h-12 shadow-sm bg-white dark:bg-[#1a2e22]"
@@ -251,7 +287,11 @@ const Home: React.FC = () => {
         {/* Deals */}
         <section className="mt-4">
           <div className="flex items-center justify-between px-4 pb-4">
-            <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Mejores Ofertas de Hoy</h3>
+            <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">
+              {selectedStore && STORE_META[selectedStore]
+                ? `Ofertas en ${STORE_META[selectedStore].name}`
+                : 'Mejores Ofertas de Hoy'}
+            </h3>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 text-primary text-sm font-semibold">
                 <span className="material-symbols-outlined text-sm">bolt</span>

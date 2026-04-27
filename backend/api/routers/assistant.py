@@ -16,7 +16,7 @@ from domain.cart_optimizer import optimize_cart
 from domain.meal_planner import MealPlannerContext, generate_per_store_plans
 from ..utils import get_price_insight
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 # Rate limiter para el endpoint de refresh manual (operación costosa)
 _refresh_attempts: dict = defaultdict(list)

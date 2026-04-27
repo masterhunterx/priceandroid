@@ -7,7 +7,7 @@ import sys
 
 # --- CONFIGURACIÓN DEL TEST ---
 BASE_URL = "http://127.0.0.1:8000"
-API_KEY = "antigravity_dev_key"
+API_KEY = "freshcart_dev_key"
 STRESS_MODE = "true"
 
 # Endpoints pesados para atacar

@@ -35,7 +35,7 @@ def _check_password(plain: str, stored: str) -> bool:
     import hmac
     return hmac.compare_digest(plain, stored)
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 # ── Rate limiter ───────────────────────────────────────────────────────────────

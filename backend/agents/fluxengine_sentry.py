@@ -13,7 +13,7 @@ from core.models import StoreProduct, UserPreference, Price
 from domain.ingest import sync_single_store_product
 from core.shield import Shield3
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 
 def fluxengine_sentry_loop():

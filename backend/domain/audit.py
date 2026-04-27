@@ -3,7 +3,7 @@ from sqlalchemy.orm import joinedload
 from core.models import Product, StoreProduct, ProductMatch
 from domain.matcher import compute_match_score, enrich_with_weight
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 def run_startup_audit(db_session):
     """

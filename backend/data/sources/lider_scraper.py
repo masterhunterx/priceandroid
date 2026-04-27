@@ -152,7 +152,7 @@ import random as _random
 import re as _re
 from threading import Lock as _Lock
 import logging as _logging
-_logger = _logging.getLogger("AntigravityAPI")
+_logger = _logging.getLogger("FreshCartAPI")
 
 # Fingerprints rotativos — PerimeterX detecta versiones fijas con el tiempo
 _FINGERPRINTS = ["chrome136", "chrome133a", "chrome131", "chrome124", "chrome120", "chrome116"]

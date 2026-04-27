@@ -15,7 +15,7 @@ from ..schemas import UnifiedResponse
 from ..middleware import get_api_key
 from agents.catalog_bot import get_catalog_bot_status, trigger_manual_scan, _catalog_bot_state
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 UTC = timezone.utc
 
 router = APIRouter(

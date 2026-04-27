@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 _STARTUP_DELAY_SECONDS  = 300    # 5 min para dejar arrancar el servidor antes del primer scan
 _SCAN_INTERVAL_SECONDS  = 7200   # 2 h entre ciclos de escaneo de stock

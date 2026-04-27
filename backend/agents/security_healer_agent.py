@@ -14,7 +14,7 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 UTC = timezone.utc
 
 HEALER_INTERVAL_SEC = 3600  # cada 1h

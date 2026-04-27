@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from .schemas import UnifiedResponse
 from core.telemetry import TelemetryService
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 async def global_exception_handler(request: Request, exc: Exception):
     """Global catch-all for errors to prevent trace leakage in production."""

@@ -16,7 +16,7 @@ if os.path.exists(env_path):
 else:
     load_dotenv() # Fallback
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 class TelemetryService:
     """

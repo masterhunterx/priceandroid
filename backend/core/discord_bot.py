@@ -19,7 +19,7 @@ DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 auth_ids_raw = os.getenv("AUTHORIZED_USER_IDS", "")
 AUTHORIZED_USER_IDS = [int(i.strip()) for i in auth_ids_raw.split(",") if i.strip()]
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 # Configuramos Intents para poder leer mensajes de los usuarios
 intents = discord.Intents.default()

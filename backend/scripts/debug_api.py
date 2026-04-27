@@ -6,7 +6,7 @@ async def test():
         try:
             resp = await client.get(
                 "http://localhost:8000/api/products/search?q=leche",
-                headers={"X-API-Key": "antigravity_dev_key"}
+                headers={"X-API-Key": "freshcart_dev_key"}
             )
             print(f"Status: {resp.status_code}")
             print(f"Body: {resp.text[:200]}")

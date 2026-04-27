@@ -14,7 +14,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 UTC = timezone.utc
 
 DISCORD_WEBHOOK    = os.getenv("DISCORD_WEBHOOK_URL", "")

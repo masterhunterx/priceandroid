@@ -40,7 +40,7 @@ logging.basicConfig(
         RotatingFileHandler("server_debug.log", maxBytes=5*1024*1024, backupCount=3, encoding="utf-8")
     ]
 )
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 # --- AGENTES EN SEGUNDO PLANO ---
 def _is_running(name: str) -> bool:

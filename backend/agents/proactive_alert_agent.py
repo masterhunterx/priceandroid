@@ -10,7 +10,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 UTC = timezone.utc
 
 _ALERT_INTERVAL_SECONDS = 900   # 15 min entre ciclos de alertas proactivas

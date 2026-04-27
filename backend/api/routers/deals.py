@@ -202,23 +202,24 @@ def list_categories():
 def list_deals(
     limit: int = Query(20, ge=1, le=100, description="Máximo de ofertas a retornar"),
     offset: int = Query(0, ge=0, description="Desplazamiento para paginación"),
+    store: Optional[str] = Query(None, description="Filtrar por slug de tienda (jumbo, santa_isabel, lider, unimarc)"),
 ):
     """
     Motor de Detección de Ofertas: Encuentra los productos con mayores descuentos activos
     en relación a su precio de lista histórico. Prioriza las ofertas recolectadas recientemente.
-    Soporta paginación mediante el parámetro offset.
+    Soporta paginación mediante el parámetro offset y filtrado por tienda.
     """
     with get_session() as session:
-        discounted = (
+        q = (
             session.query(StoreProduct, Price, Store)
             .join(Price, Price.store_product_id == StoreProduct.id)
             .join(Store, Store.id == StoreProduct.store_id)
             .filter(Price.has_discount == True)
             .filter(StoreProduct.in_stock == True)
-            .order_by(Price.scraped_at.desc())
-            .limit((limit + offset) * 3)
-            .all()
         )
+        if store:
+            q = q.filter(Store.slug == store)
+        discounted = q.order_by(Price.scraped_at.desc()).limit((limit + offset) * 3).all()
 
         seen_products = set()
         all_deals = []

@@ -19,7 +19,7 @@ from core.models import Feedback
 from ..schemas import UnifiedResponse
 from ..middleware import get_api_key
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 UTC = timezone.utc
 
 router = APIRouter(

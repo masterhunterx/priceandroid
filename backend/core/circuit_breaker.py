@@ -12,7 +12,7 @@ import threading
 import time
 import logging
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 FAILURE_THRESHOLD = 3         # errores consecutivos para abrir el circuito
 RECOVERY_TIMEOUT  = 3600      # segundos bloqueado antes de probar recuperación (1h)

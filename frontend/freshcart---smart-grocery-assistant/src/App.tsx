@@ -3,6 +3,7 @@ import { Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import StoreSelect from './pages/StoreSelect';
 import SearchResults from './pages/SearchResults';
 import ProductDetails from './pages/ProductDetails';
 import Categories from './pages/Categories';
@@ -40,11 +41,12 @@ const AppContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
   const isLoginPage = location.pathname === '/login';
+  const isStoreSelectPage = location.pathname === '/store-select';
 
   return (
     <>
-      {!isAppReady && !isLoginPage && <SplashScreen onComplete={() => setIsAppReady(true)} />}
-      <div className={`max-w-md mx-auto min-h-screen relative pb-24 text-slate-900 dark:text-slate-100 transition-opacity duration-700 ${(isAppReady || isLoginPage) ? 'opacity-100' : 'opacity-0'}`}>
+      {!isAppReady && !isLoginPage && !isStoreSelectPage && <SplashScreen onComplete={() => setIsAppReady(true)} />}
+      <div className={`max-w-md mx-auto min-h-screen relative pb-24 text-slate-900 dark:text-slate-100 transition-opacity duration-700 ${(isAppReady || isLoginPage || isStoreSelectPage) ? 'opacity-100' : 'opacity-0'}`}>
 
         <AnimatePresence mode="wait">
           {/* key en el wrapper para que AnimatePresence detecte cambios de ruta */}
@@ -52,6 +54,13 @@ const AppContent: React.FC = () => {
           <Routes location={location}>
             {/* Ruta pública */}
             <Route path="/login" element={<Login />} />
+
+            {/* Selección de tienda — protegida pero sin BottomNav */}
+            <Route path="/store-select" element={
+              <ProtectedRoute>
+                <StoreSelect />
+              </ProtectedRoute>
+            } />
 
             {/* Rutas protegidas */}
             <Route path="/" element={
@@ -97,9 +106,9 @@ const AppContent: React.FC = () => {
           </Routes>
           </div>
         </AnimatePresence>
-        {isAuthenticated && !isLoginPage && <BottomNav />}
-        {isAuthenticated && !isLoginPage && <FeedbackButton />}
-        {isAuthenticated && !isLoginPage && <OnboardingTour />}
+        {isAuthenticated && !isLoginPage && !isStoreSelectPage && <BottomNav />}
+        {isAuthenticated && !isLoginPage && !isStoreSelectPage && <FeedbackButton />}
+        {isAuthenticated && !isLoginPage && !isStoreSelectPage && <OnboardingTour />}
         <Toaster position="top-center" reverseOrder={false} />
       </div>
     </>

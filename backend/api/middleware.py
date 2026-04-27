@@ -7,7 +7,7 @@ from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import JSONResponse
 from core.shield import Shield3
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)

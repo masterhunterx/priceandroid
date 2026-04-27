@@ -9,6 +9,8 @@ interface LocationContextType {
   loading: boolean;
   error: string | null;
   selectedLocationName: string | null;
+  selectedStore: string | null;
+  setSelectedStore: (slug: string | null) => void;
   updateLocation: (lat: number, lng: number, name?: string) => Promise<void>;
   clearLocation: () => void;
   selectBranch: (storeSlug: string, branch: Branch) => void;
@@ -44,6 +46,16 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [selectedBranches, setSelectedBranches] = useState<Record<string, Branch>>(
     () => safeParse<Record<string, Branch>>('selected_branches', {})
   );
+
+  const [selectedStore, setSelectedStoreState] = useState<string | null>(
+    () => localStorage.getItem('selected_store')
+  );
+
+  const setSelectedStore = (slug: string | null) => {
+    setSelectedStoreState(slug);
+    if (slug) localStorage.setItem('selected_store', slug);
+    else localStorage.removeItem('selected_store');
+  };
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -170,13 +182,15 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
   */
 
   return (
-    <LocationContext.Provider value={{ 
-      coords, 
-      selectedBranches, 
-      loading, 
-      error, 
+    <LocationContext.Provider value={{
+      coords,
+      selectedBranches,
+      loading,
+      error,
       selectedLocationName,
-      updateLocation, 
+      selectedStore,
+      setSelectedStore,
+      updateLocation,
       clearLocation,
       selectBranch,
       requestCurrentLocation,

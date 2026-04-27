@@ -28,7 +28,7 @@ const Login: React.FC = () => {
           clearInterval(pollRef.current!);
           // Auto-login una vez aprobado
           const result = await login(pendingUser, pendingPwd);
-          if (result === 'ok') navigate('/', { replace: true });
+          if (result === 'ok') navigate('/store-select', { replace: true });
         }
       } catch {
         // ignorar errores de red durante polling
@@ -50,7 +50,7 @@ const Login: React.FC = () => {
     try {
       const result = await login(username, password);
       if (result === 'ok') {
-        navigate('/', { replace: true });
+        navigate('/store-select', { replace: true });
       } else if (result === 'pending') {
         setPendingUser(username.trim().toLowerCase());
         setPendingPwd(password);

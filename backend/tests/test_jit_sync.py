@@ -11,7 +11,7 @@ from core.models import StoreProduct, Product
 import requests
 
 API_URL = "http://localhost:8000/api"
-HEADERS = {"X-API-Key": "antigravity_dev_key"}
+HEADERS = {"X-API-Key": "freshcart_dev_key"}
 UTC = timezone.utc
 
 def test_jit_sync():

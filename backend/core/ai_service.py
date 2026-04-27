@@ -20,7 +20,7 @@ load_dotenv()
 
 from typing import List, Dict, Any, Optional
 
-logger = logging.getLogger("AntigravityAPI")
+logger = logging.getLogger("FreshCartAPI")
 
 # ── Configuración ──────────────────────────────────────────────────────────────
 OPENROUTER_MODELS = [
@@ -199,7 +199,7 @@ class KairosAIService:
                 max_retries=0,  # fallback manual a HF, no reintentos automáticos
                 timeout=AI_TIMEOUT_SECS,
                 default_headers={
-                    "HTTP-Referer": "https://antigravity.app",
+                    "HTTP-Referer": "https://freshcart.app",
                     "X-Title": "KAIROS Grocery Assistant",
                 },
             )
