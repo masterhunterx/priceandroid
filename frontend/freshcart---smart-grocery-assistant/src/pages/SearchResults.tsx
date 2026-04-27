@@ -141,6 +141,14 @@ const SearchResults: React.FC = () => {
   const liveSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Limpiar timers pendientes al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (suggestTimer.current) clearTimeout(suggestTimer.current);
+      if (liveSearchTimer.current) clearTimeout(liveSearchTimer.current);
+    };
+  }, []);
+
   const handleInputChange = (value: string) => {
     setSearchQuery(value);
 

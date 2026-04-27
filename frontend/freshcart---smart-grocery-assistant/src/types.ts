@@ -19,7 +19,7 @@ export interface PricePoint {
   last_sync: string;
   is_card_price?: boolean;     // true si requiere tarjeta del supermercado
   card_label?: string;          // ej: 'Tarjeta Cencosud', 'Club Unimarc'
-  offer_type?: string;          // 'card', 'internet', 'app', 'generic'
+  offer_type?: 'card' | 'internet' | 'app' | 'generic';
   club_price?: number | null;
   unit_price?: number | null;
   price_per_unit?: number | null;  // $/100g o $/100ml normalizado

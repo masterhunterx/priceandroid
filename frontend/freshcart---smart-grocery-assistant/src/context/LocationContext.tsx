@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { Branch } from '../types';
 import { getNearestBranches } from '../lib/api';
 import toast from 'react-hot-toast';
@@ -234,13 +234,13 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
     );
   };
 
-  const getBranchContext = () => {
+  const getBranchContext = useCallback(() => {
     const context: Record<string, string> = {};
     Object.entries(selectedBranches).forEach(([slug, branch]) => {
       context[slug] = (branch as Branch).external_store_id;
     });
     return context;
-  };
+  }, [selectedBranches]);
 
   // Initial check: Disabled automatically as requested (Stand by)
   /*

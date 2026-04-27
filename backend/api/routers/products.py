@@ -30,6 +30,7 @@ from ..utils import (
     trigger_jit_sync_standalone,
     best_price_info,
     analyze_promo,
+    _infer_unit_label,
 )
 from ..middleware import get_api_key
 
@@ -71,6 +72,12 @@ def _strip_accents(text: str) -> str:
         c for c in unicodedata.normalize('NFD', text)
         if unicodedata.category(c) != 'Mn'
     )
+
+def _logged_jit_sync(product_id: int, branch_context=None):
+    try:
+        trigger_jit_sync(product_id, branch_context=branch_context)
+    except Exception as exc:
+        logger.warning(f"[JIT-bg] sync falló para product_id={product_id}: {exc}")
 
 @router.get("/search", response_model=UnifiedResponse)
 def search_products(
@@ -147,6 +154,8 @@ def search_products(
             main_query = main_query.filter(StoreProduct.in_stock == in_stock)
 
         if category:
+            if len(category) > 100:
+                raise HTTPException(status_code=400, detail="El filtro de categoría es demasiado largo.")
             _STOP = {'y', 'de', 'del', 'la', 'las', 'el', 'los', 'a', 'e'}
             cat_lower = category.strip().lower()
             cat_esc = cat_lower.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
@@ -283,7 +292,9 @@ def search_products(
                     store_logo=sp.store.logo_url or "",
                     price=price_val,
                     in_stock=sp.in_stock,
-                    last_sync=sp.last_sync.isoformat() if sp.last_sync else ""
+                    last_sync=sp.last_sync.isoformat() if sp.last_sync else "",
+                    price_per_unit=sp.unit_price_norm,
+                    unit_label=_infer_unit_label(sp.measurement_unit),
                 )],
                 best_price=price_val,
                 best_store=sp.store.name,
@@ -394,8 +405,11 @@ def get_product(
                 raise HTTPException(status_code=404, detail="Producto no encontrado")
             
             # Sincronización instantánea si los datos están desactualizados
-            trigger_jit_sync_standalone(sp, branch_context=branch_map)
-            session.refresh(sp)
+            try:
+                trigger_jit_sync_standalone(sp, branch_context=branch_map)
+                session.refresh(sp)
+            except Exception as exc:
+                logger.warning(f"[JIT] sync falló para sp_id={sp_id}: {exc}")
             latest = sp.latest_price
             promo_desc = (latest.promo_description or "") if latest else ""
             p_info = analyze_promo(promo_desc)
@@ -439,7 +453,7 @@ def get_product(
             ))
 
     # JIT sync en background — no bloquea el request; el usuario ve datos del último ciclo
-    background_tasks.add_task(trigger_jit_sync, product_id, branch_context=branch_map)
+    background_tasks.add_task(_logged_jit_sync, product_id, branch_context=branch_map)
     
     with get_session() as session:
         product = session.get(Product, product_id)
@@ -449,25 +463,29 @@ def get_product(
         price_points = build_price_points(session, product.id, branch_context=branch_map)
         best_price_val, b_store, b_store_slug = best_price_info(price_points)
 
-        # Recopilación de historial de precios reciente — joinedload evita N+1
-        price_history = []
-        store_products = (
-            session.query(StoreProduct)
-            .options(joinedload(StoreProduct.prices))
+        # Historial de precios: query directa con LIMIT — evita cargar todas las filas en memoria
+        PRICE_HISTORY_LIMIT = 60
+        sp_id_list = [
+            r[0] for r in session.query(StoreProduct.id)
             .filter(StoreProduct.product_id == product.id)
             .all()
-        )
-        PRICE_HISTORY_LIMIT = 60  # últimas N entradas por tienda para gráficos precisos
-        for sp in store_products:
-            # Ordenar por fecha desc y tomar los más recientes
-            recent = sorted(sp.prices, key=lambda p: p.scraped_at or 0, reverse=True)[:PRICE_HISTORY_LIMIT]
-            for price_record in recent:
-                price_history.append(PriceHistoryOut(
-                    price=price_record.price,
-                    scraped_at=price_record.scraped_at.isoformat() if price_record.scraped_at else "",
-                ))
-
-        price_history.sort(key=lambda ph: ph.scraped_at)
+        ]
+        price_history = []
+        if sp_id_list:
+            history_rows = (
+                session.query(Price)
+                .filter(Price.store_product_id.in_(sp_id_list))
+                .order_by(Price.scraped_at.asc())
+                .limit(PRICE_HISTORY_LIMIT)
+                .all()
+            )
+            price_history = [
+                PriceHistoryOut(
+                    price=pr.price,
+                    scraped_at=pr.scraped_at.isoformat() if pr.scraped_at else "",
+                )
+                for pr in history_rows
+            ]
 
         return UnifiedResponse(data=ProductDetailOut(
             id=product.id,

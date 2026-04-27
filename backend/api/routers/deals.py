@@ -214,6 +214,10 @@ def list_deals(
     en relación a su precio de lista histórico. Prioriza las ofertas recolectadas recientemente.
     Soporta paginación mediante el parámetro offset y filtrado por tienda.
     """
+    _VALID_STORE_SLUGS = frozenset({'jumbo', 'lider', 'santa_isabel', 'unimarc'})
+    if store and store not in _VALID_STORE_SLUGS:
+        raise HTTPException(status_code=400, detail="Slug de tienda no válido.")
+
     with get_session() as session:
         q = (
             session.query(StoreProduct, Price, Store)

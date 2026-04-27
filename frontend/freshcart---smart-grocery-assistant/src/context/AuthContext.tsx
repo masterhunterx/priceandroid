@@ -47,6 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!token) return;
     const controller = new AbortController();
     let cancelled = false;
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     fetch(`${API_BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -64,10 +65,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }).catch((err) => {
       if (err.name !== 'AbortError') { /* sin conexión — seguir con el token guardado */ }
+    }).finally(() => {
+      clearTimeout(timeoutId);
     });
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       controller.abort();
     };
   }, []); // solo al montar

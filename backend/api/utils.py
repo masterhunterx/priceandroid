@@ -278,7 +278,8 @@ def trigger_jit_sync(product_id: int, branch_context: Optional[Dict[str, str]] =
                     target_branch = branch.id
 
             # Verificación de obsolescencia
-            is_stale = (sp.last_sync is None) or (datetime.now(UTC) - sp.last_sync.replace(tzinfo=UTC) > STALE_THRESHOLD)
+            last_sync_aware = sp.last_sync if (sp.last_sync and sp.last_sync.tzinfo) else (sp.last_sync.replace(tzinfo=UTC) if sp.last_sync else None)
+            is_stale = (last_sync_aware is None) or (datetime.now(UTC) - last_sync_aware > STALE_THRESHOLD)
             
             # Si el usuario cambió de branch, forzamos sync aunque no sea stale
             if target_branch and sp.branch_id != target_branch:
@@ -302,7 +303,8 @@ def trigger_jit_sync_standalone(sp, branch_context: Optional[Dict[str, str]] = N
             branch = session.query(Branch).filter_by(store_id=sp.store_id, external_store_id=ext_id).first()
             if branch: target_branch = branch.id
 
-        is_stale = (sp.last_sync is None) or (datetime.now(UTC) - sp.last_sync.replace(tzinfo=UTC) > STALE_THRESHOLD)
+        last_sync_aware = sp.last_sync if (sp.last_sync and sp.last_sync.tzinfo) else (sp.last_sync.replace(tzinfo=UTC) if sp.last_sync else None)
+        is_stale = (last_sync_aware is None) or (datetime.now(UTC) - last_sync_aware > STALE_THRESHOLD)
         if is_stale or (target_branch and sp.branch_id != target_branch):
             with get_session() as session:
                 sync_single_store_product(session, sp.id, branch_id=target_branch)
