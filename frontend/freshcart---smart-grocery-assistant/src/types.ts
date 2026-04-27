@@ -153,3 +153,14 @@ export interface SearchSuggestion {
   store_slug?: string;
   store_logo?: string;
 }
+
+export interface HistoricLow {
+  product_id: number;
+  product_name: string;
+  min_price_all_time: number | null;
+  image_url?: string;
+  store_name: string;
+  store_slug?: string;
+  brand?: string;
+  savings_pct?: number;
+}

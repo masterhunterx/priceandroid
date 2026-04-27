@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { Branch } from '../types';
 import { getNearestBranches } from '../lib/api';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import toast from 'react-hot-toast';
 
 const STORE_THEMES: Record<string, {
@@ -88,26 +89,10 @@ export const useLocation = () => {
   return context;
 };
 
-// Parsea JSON de localStorage de forma segura; limpia la clave si está corrompida.
-function safeParse<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    localStorage.removeItem(key);
-    return fallback;
-  }
-}
-
 export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const locationAbortRef = useRef<AbortController | null>(null);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
-    () => safeParse<{ lat: number; lng: number } | null>('user_coords', null)
-  );
-
-  const [selectedBranches, setSelectedBranches] = useState<Record<string, Branch>>(
-    () => safeParse<Record<string, Branch>>('selected_branches', {})
-  );
+  const [coords, setCoords] = useLocalStorage<{ lat: number; lng: number } | null>('user_coords', null);
+  const [selectedBranches, setSelectedBranches] = useLocalStorage<Record<string, Branch>>('selected_branches', {});
 
   const [selectedStore, setSelectedStoreState] = useState<string | null>(
     () => localStorage.getItem('selected_store')
@@ -134,11 +119,9 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'user_coords') {
-        if (!e.newValue) { setCoords(null); return; }
-        try { setCoords(JSON.parse(e.newValue)); } catch { setCoords(null); }
+        setCoords(e.newValue ? JSON.parse(e.newValue) : null);
       } else if (e.key === 'selected_branches') {
-        if (!e.newValue) { setSelectedBranches({}); return; }
-        try { setSelectedBranches(JSON.parse(e.newValue)); } catch { setSelectedBranches({}); }
+        setSelectedBranches(e.newValue ? JSON.parse(e.newValue) : null);
       } else if (e.key === 'user_location_name') {
         setSelectedLocationName(e.newValue);
       } else if (e.key === 'selected_store') {
@@ -161,7 +144,6 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
     try {
       const point = { lat, lng };
       setCoords(point);
-      localStorage.setItem('user_coords', JSON.stringify(point));
 
       if (name) {
         setSelectedLocationName(name);
@@ -185,7 +167,6 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
       });
 
       setSelectedBranches(newSelections);
-      localStorage.setItem('selected_branches', JSON.stringify(newSelections));
       toast.success('Ubicación actualizada correctamente');
     } catch (err) {
       console.error('Error updating location:', err);
@@ -198,10 +179,8 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
   
   const clearLocation = () => {
     setCoords(null);
-    setSelectedBranches({});
+    setSelectedBranches(null);
     setSelectedLocationName(null);
-    localStorage.removeItem('user_coords');
-    localStorage.removeItem('selected_branches');
     localStorage.removeItem('user_location_name');
     localStorage.setItem('location_dismissed', 'true');
     toast.success('Usando precios web genéricos');
@@ -210,7 +189,6 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
   const selectBranch = (storeSlug: string, branch: Branch) => {
     const newSelections = { ...selectedBranches, [storeSlug]: branch };
     setSelectedBranches(newSelections);
-    localStorage.setItem('selected_branches', JSON.stringify(newSelections));
     toast.success(`${branch.store_name}: ${branch.name} seleccionado`);
   };
 

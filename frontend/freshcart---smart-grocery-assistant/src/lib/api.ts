@@ -1,4 +1,4 @@
-import { Product, Deal, Category, Notification, PlanningResult, Branch, LocationHierarchy, SearchSuggestion } from '../types';
+import { Product, Deal, Category, Notification, PlanningResult, Branch, LocationHierarchy, SearchSuggestion, HistoricLow } from '../types';
 import { getStoredToken } from '../context/AuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -230,7 +230,7 @@ export async function getLocationHierarchy(): Promise<LocationHierarchy> {
 
 // ── Asistente KAIROS ───────────────────────────────────────────────────────────
 
-export async function optimizeCart(items: {query: string, qty: number}[]): Promise<any> {
+export async function optimizeCart(items: {query: string, qty: number}[]): Promise<PlanningResult> {
   const resp = await fetchWithAuth(`${API_BASE_URL}/assistant/optimize_cart`, {
     method: 'POST',
     headers: getHeaders(),
@@ -320,7 +320,7 @@ export async function consumePantryItem(id: number): Promise<any> {
 
 // ── Mínimos históricos ─────────────────────────────────────────────────────────
 
-export async function getHistoricLows(limit = 10): Promise<any[]> {
+export async function getHistoricLows(limit = 10): Promise<HistoricLow[]> {
   const resp = await fetchWithAuth(`${API_BASE_URL}/deals/historic-lows?limit=${limit}`, { headers: getHeaders() });
   const json = await resp.json();
   if (!json.success) return [];

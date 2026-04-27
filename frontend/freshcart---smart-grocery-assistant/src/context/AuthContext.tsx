@@ -1,12 +1,20 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
-const ACCESS_KEY  = 'freshcart_access_token';
-const REFRESH_KEY = 'freshcart_refresh_token';
+const ACCESS_KEY   = 'freshcart_access_token';
+const REFRESH_KEY  = 'freshcart_refresh_token';
+const USERNAME_KEY = 'freshcart_username';
+
+function _decodeUsername(token: string): string | null {
+  try {
+    return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub || null;
+  } catch { return null; }
+}
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 interface AuthContextType {
   token: string | null;
+  username: string | null;
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<'ok' | 'pending'>;
   logout: () => void;
@@ -16,6 +24,12 @@ const AuthContext = createContext<AuthContextType>(null!);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(ACCESS_KEY));
+  const [username, setUsername] = useState<string | null>(() => {
+    const stored = localStorage.getItem(USERNAME_KEY);
+    if (stored) return stored;
+    const t = localStorage.getItem(ACCESS_KEY);
+    return t ? _decodeUsername(t) : null;
+  });
 
   // Intenta renovar el access token usando el refresh token guardado
   const tryRefresh = useCallback(async (): Promise<string | null> => {
@@ -97,17 +111,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(ACCESS_KEY, access_token);
     localStorage.setItem(REFRESH_KEY, refresh_token);
     setToken(access_token);
+    const uname = json.data.username || _decodeUsername(access_token);
+    setUsername(uname);
+    if (uname) localStorage.setItem(USERNAME_KEY, uname);
     return 'ok';
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(USERNAME_KEY);
     setToken(null);
+    setUsername(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, isAuthenticated: !!token, login, logout }}>
+    <AuthContext.Provider value={{ token, username, isAuthenticated: !!token, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

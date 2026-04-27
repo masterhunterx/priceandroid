@@ -22,6 +22,12 @@ const STORE_LABELS: Record<string, string> = {
   santa_isabel: 'Santa Isabel',
 };
 
+const OFFER_BADGE: Record<string, { cls: string; icon: string; label: string }> = {
+  card:     { cls: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400', icon: 'credit_card', label: 'Club' },
+  internet: { cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400', icon: 'public', label: 'Web' },
+  app:      { cls: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400', icon: 'smartphone', label: 'App' },
+};
+
 const SearchResults: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -419,16 +425,10 @@ const SearchResults: React.FC = () => {
                             return (
                               <div className="flex flex-col gap-1 mt-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  {ot && ot !== 'generic' && (
-                                    <span className={`flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                      ot === 'card' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
-                                      ot === 'internet' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400' :
-                                      'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400'
-                                    }`}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: '10px' }}>
-                                        {ot === 'card' ? 'credit_card' : ot === 'internet' ? 'public' : 'smartphone'}
-                                      </span>
-                                      {ot === 'card' ? 'Club' : ot === 'internet' ? 'Web' : 'App'}
+                                  {ot && OFFER_BADGE[ot] && (
+                                    <span className={`flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded ${OFFER_BADGE[ot].cls}`}>
+                                      <span className="material-symbols-outlined" style={{ fontSize: '10px' }}>{OFFER_BADGE[ot].icon}</span>
+                                      {OFFER_BADGE[ot].label}
                                     </span>
                                   )}
                                 </div>

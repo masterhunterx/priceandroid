@@ -1,19 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications, searchProducts } from '../lib/api';
-import { Deal, Category, Notification, Branch, Product } from '../types';
+import { Deal, Category, Notification, Branch, Product, HistoricLow } from '../types';
 import { useAuth } from '../context/AuthContext';
+import HomeHeader from '../components/HomeHeader';
 
-interface HistoricLow {
-  product_id: number;
-  product_name: string;
-  min_price_all_time: number | null;
-  image_url?: string;
-  store_name: string;
-  store_slug?: string;
-  brand?: string;
-  savings_pct?: number;
-}
 import StoreLogo from '../components/StoreLogo';
 import { useLocation } from '../context/LocationContext';
 import { useTheme } from '../context/ThemeContext';
@@ -25,15 +16,6 @@ const STORE_META: Record<string, { name: string; color: string }> = {
   lider:        { name: 'Líder',        color: '#0071ce' },
   unimarc:      { name: 'Unimarc',      color: '#da291c' },
 };
-
-function getUsername(): string {
-  try {
-    const token = localStorage.getItem('freshcart_access_token');
-    if (!token) return 'Usuario';
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return payload.sub || 'Usuario';
-  } catch { return 'Usuario'; }
-}
 
 const CATEGORY_SEARCH_OVERRIDES: Record<string, string> = {
   'Lácteos y Huevos':   'Lácteos',
@@ -52,11 +34,9 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const { coords, selectedBranches, selectedStore, setSelectedStore } = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { logout } = useAuth();
+  const { username: authUsername } = useAuth();
+  const username = authUsername || 'Usuario';
   const [isLocationOpen, setIsLocationOpen] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
-  const username = getUsername();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [essentialProducts, setEssentialProducts] = useState<Product[]>([]);
   const [historicLows, setHistoricLows] = useState<HistoricLow[]>([]);
@@ -154,17 +134,6 @@ const Home: React.FC = () => {
     }
   };
 
-  // Cerrar menú al click fuera
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setShowUserMenu(false);
-      }
-    }
-    if (showUserMenu) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showUserMenu]);
-
   const getCategoryIcon = (name: string) => {
     const n = name.toLowerCase();
     if (n.includes('leche') || n.includes('lacteos')) return 'local_drink';
@@ -180,122 +149,14 @@ const Home: React.FC = () => {
     <div className="flex flex-col">
       <LocationSelector isOpen={isLocationOpen} onClose={() => setIsLocationOpen(false)} />
       
-      {/* Header — backdrop color matches active store theme */}
-      <header
-        className="sticky top-0 z-50 backdrop-blur-md"
-        style={{ backgroundColor: theme === 'dark' ? 'var(--store-header-bg-dark)' : 'var(--store-header-bg-light)' }}
-      >
-        <div className="flex items-center p-4 pb-0 justify-between">
-          <div className="relative" ref={userMenuRef}>
-            <button
-              onClick={() => setShowUserMenu(v => !v)}
-              className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-primary/30 bg-primary/10 text-primary active:scale-90 transition-transform"
-            >
-              <span className="material-symbols-outlined text-[24px]">person</span>
-            </button>
-            {showUserMenu && (
-              <div className="absolute left-0 top-12 z-50 min-w-[160px] rounded-2xl bg-white dark:bg-slate-800 shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-                  <p className="text-xs text-slate-400 dark:text-slate-500">Sesión iniciada como</p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{username}</p>
-                </div>
-                <button
-                  onClick={() => { setShowUserMenu(false); logout(); navigate('/login'); }}
-                  className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[18px]">logout</span>
-                  Cerrar sesión
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="flex-1 px-3">
-            {selectedStore && STORE_META[selectedStore] ? (
-              <div className="flex items-center gap-1.5">
-                <div
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: STORE_META[selectedStore].color }}
-                />
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-                  {STORE_META[selectedStore].name}
-                </p>
-                <button
-                  onClick={() => navigate('/store-select')}
-                  className="ml-1 text-[9px] text-primary font-bold uppercase tracking-wider underline underline-offset-2"
-                >
-                  cambiar
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-primary text-[16px]">store</span>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-                  Todas las tiendas
-                  <button
-                    onClick={() => navigate('/store-select')}
-                    className="ml-2 text-primary underline underline-offset-2"
-                  >
-                    cambiar
-                  </button>
-                </p>
-              </div>
-            )}
-            <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">
-              {!searchingDeals && deals.length === 0 && essentialProducts.length > 0
-                ? `Productos en ${selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : 'la tienda'}`
-                : selectedStore && STORE_META[selectedStore]
-                  ? `Ofertas en ${STORE_META[selectedStore].name}`
-                  : 'Mejores Ofertas'}
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={toggleTheme}
-              className="flex size-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all active:scale-90"
-              title={theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}
-            >
-              <span className="material-symbols-outlined">
-                {theme === 'dark' ? 'light_mode' : 'dark_mode'}
-              </span>
-            </button>
-            <button 
-              onClick={() => navigate('/notifications')}
-              className="relative flex size-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-            >
-              <span className="material-symbols-outlined">notifications</span>
-              {notifications.length > 0 && (
-                <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Search Bar */}
-        <div className="px-4 py-3">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const q = (e.currentTarget.elements.namedItem('search') as HTMLInputElement).value;
-              if (q) navigate(`/search?q=${q}${selectedStore ? `&store=${selectedStore}` : ''}`);
-            }}
-            data-tour="search"
-            className="flex w-full items-stretch rounded-xl h-12 shadow-sm bg-white"
-            style={theme === 'dark' ? { backgroundColor: 'var(--store-surface-dark)' } : undefined}
-          >
-            <div className="text-primary flex items-center justify-center pl-4">
-              <span className="material-symbols-outlined">search</span>
-            </div>
-            <input
-              name="search"
-              className="flex-1 flex items-center px-4 pl-2 text-slate-900 dark:text-white bg-transparent border-none focus:ring-0 placeholder:text-slate-400 dark:placeholder:text-[#9db9a8] text-base font-normal"
-              placeholder="Buscar productos o marcas..."
-            />
-            <button type="submit" className="flex items-center pr-3">
-              <span className="material-symbols-outlined text-primary">arrow_forward</span>
-            </button>
-          </form>
-        </div>
-      </header>
+      <HomeHeader
+        username={username}
+        selectedStore={selectedStore}
+        theme={theme}
+        notifications={notifications}
+        toggleTheme={toggleTheme}
+        onOpenLocation={() => setIsLocationOpen(true)}
+      />
 
       {/* Main Content */}
       <main>
