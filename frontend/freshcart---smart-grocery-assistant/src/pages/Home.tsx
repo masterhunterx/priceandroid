@@ -139,8 +139,11 @@ const Home: React.FC = () => {
     <div className="flex flex-col">
       <LocationSelector isOpen={isLocationOpen} onClose={() => setIsLocationOpen(false)} />
       
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md">
+      {/* Header — backdrop color matches active store theme */}
+      <header
+        className="sticky top-0 z-50 backdrop-blur-md"
+        style={{ backgroundColor: theme === 'dark' ? 'var(--store-header-bg-dark)' : 'var(--store-header-bg-light)' }}
+      >
         <div className="flex items-center p-4 pb-0 justify-between">
           <div className="relative" ref={userMenuRef}>
             <button
@@ -233,7 +236,8 @@ const Home: React.FC = () => {
               if (q) navigate(`/search?q=${q}${selectedStore ? `&store=${selectedStore}` : ''}`);
             }}
             data-tour="search"
-            className="flex w-full items-stretch rounded-xl h-12 shadow-sm bg-white dark:bg-[#1a2e22]"
+            className="flex w-full items-stretch rounded-xl h-12 shadow-sm bg-white"
+            style={theme === 'dark' ? { backgroundColor: 'var(--store-surface-dark)' } : undefined}
           >
             <div className="text-primary flex items-center justify-center pl-4">
               <span className="material-symbols-outlined">search</span>

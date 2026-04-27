@@ -4,6 +4,18 @@
   --primary: #00f076;
   --background-light: #f8f9fb;
   --background-dark: #060913;
+
+  /* Store theme defaults (FreshCart green) */
+  --store-primary: #00f076;
+  --store-primary-text: #000000;
+  --store-bg-dark: #060913;
+  --store-bg-light: #f8f9fb;
+  --store-surface-dark: #0d1326;
+  --store-surface-darker: #0a0f1d;
+  --store-header-bg-dark: rgba(6,9,19,0.85);
+  --store-header-bg-light: rgba(248,249,251,0.88);
+  --store-nav-bg-dark: rgba(10,15,29,0.80);
+  --store-gradient: rgba(0,240,118,0.10);
 }
 
 body {
@@ -11,6 +23,40 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Store-aware background overrides ──────────────────────────────────────
+   When html[data-store] is present, override the Tailwind bg classes so
+   every page/card/surface picks up the selected store's brand colors.
+   Higher specificity than Tailwind utilities → no !important needed. */
+
+html[data-store] .bg-background-light {
+  background-color: var(--store-bg-light);
+  transition: background-color 0.5s ease;
+}
+
+html[data-store].dark .dark\:bg-background-dark {
+  background-color: var(--store-bg-dark);
+  transition: background-color 0.5s ease;
+}
+
+html[data-store].dark .dark\:bg-surface-dark {
+  background-color: var(--store-surface-dark);
+  transition: background-color 0.5s ease;
+}
+
+html[data-store].dark .dark\:bg-surface-darker {
+  background-color: var(--store-surface-darker);
+  transition: background-color 0.5s ease;
+}
+
+/* Smooth transition for ALL store color changes */
+body,
+.bg-background-light,
+.dark\:bg-background-dark,
+.dark\:bg-surface-dark,
+.dark\:bg-surface-darker {
+  transition: background-color 0.5s ease;
 }
 
 .no-scrollbar::-webkit-scrollbar {

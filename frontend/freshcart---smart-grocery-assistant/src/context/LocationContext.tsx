@@ -3,6 +3,68 @@ import { Branch } from '../types';
 import { getNearestBranches } from '../lib/api';
 import toast from 'react-hot-toast';
 
+const STORE_THEMES: Record<string, {
+  primary: string; primaryText: string;
+  bgDark: string; bgLight: string;
+  surfaceDark: string; surfaceDarker: string;
+  headerBgDark: string; headerBgLight: string;
+  navBgDark: string; gradient: string;
+}> = {
+  jumbo: {
+    primary: '#00a650', primaryText: '#ffffff',
+    bgDark: '#04100a', bgLight: '#edfaf2',
+    surfaceDark: '#0d2418', surfaceDarker: '#091c12',
+    headerBgDark: 'rgba(4,16,10,0.85)', headerBgLight: 'rgba(237,250,242,0.88)',
+    navBgDark: 'rgba(9,28,18,0.80)', gradient: 'rgba(0,166,80,0.15)',
+  },
+  santa_isabel: {
+    primary: '#e30613', primaryText: '#ffffff',
+    bgDark: '#100305', bgLight: '#fff0f1',
+    surfaceDark: '#23080f', surfaceDarker: '#1a0509',
+    headerBgDark: 'rgba(16,3,5,0.85)', headerBgLight: 'rgba(255,240,241,0.88)',
+    navBgDark: 'rgba(26,5,9,0.80)', gradient: 'rgba(227,6,19,0.15)',
+  },
+  lider: {
+    primary: '#0071ce', primaryText: '#ffffff',
+    bgDark: '#020912', bgLight: '#edf3ff',
+    surfaceDark: '#06142b', surfaceDarker: '#050f20',
+    headerBgDark: 'rgba(2,9,18,0.85)', headerBgLight: 'rgba(237,243,255,0.88)',
+    navBgDark: 'rgba(5,15,32,0.80)', gradient: 'rgba(0,113,206,0.15)',
+  },
+  unimarc: {
+    primary: '#da291c', primaryText: '#ffffff',
+    bgDark: '#100303', bgLight: '#fff0ef',
+    surfaceDark: '#230b09', surfaceDarker: '#1a0806',
+    headerBgDark: 'rgba(16,3,3,0.85)', headerBgLight: 'rgba(255,240,239,0.88)',
+    navBgDark: 'rgba(26,8,6,0.80)', gradient: 'rgba(218,41,28,0.15)',
+  },
+};
+
+const DEFAULT_THEME = {
+  primary: '#00f076', primaryText: '#000000',
+  bgDark: '#060913', bgLight: '#f8f9fb',
+  surfaceDark: '#0d1326', surfaceDarker: '#0a0f1d',
+  headerBgDark: 'rgba(6,9,19,0.85)', headerBgLight: 'rgba(248,249,251,0.88)',
+  navBgDark: 'rgba(10,15,29,0.80)', gradient: 'rgba(0,240,118,0.10)',
+};
+
+function applyStoreTheme(slug: string | null) {
+  const t = (slug && STORE_THEMES[slug]) ? STORE_THEMES[slug] : DEFAULT_THEME;
+  const root = document.documentElement;
+  if (slug && STORE_THEMES[slug]) root.setAttribute('data-store', slug);
+  else root.removeAttribute('data-store');
+  root.style.setProperty('--store-primary', t.primary);
+  root.style.setProperty('--store-primary-text', t.primaryText);
+  root.style.setProperty('--store-bg-dark', t.bgDark);
+  root.style.setProperty('--store-bg-light', t.bgLight);
+  root.style.setProperty('--store-surface-dark', t.surfaceDark);
+  root.style.setProperty('--store-surface-darker', t.surfaceDarker);
+  root.style.setProperty('--store-header-bg-dark', t.headerBgDark);
+  root.style.setProperty('--store-header-bg-light', t.headerBgLight);
+  root.style.setProperty('--store-nav-bg-dark', t.navBgDark);
+  root.style.setProperty('--store-gradient', t.gradient);
+}
+
 interface LocationContextType {
   coords: { lat: number; lng: number } | null;
   selectedBranches: Record<string, Branch>; // slug -> Branch
@@ -51,10 +113,15 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
     () => localStorage.getItem('selected_store')
   );
 
+  useEffect(() => {
+    applyStoreTheme(localStorage.getItem('selected_store'));
+  }, []);
+
   const setSelectedStore = (slug: string | null) => {
     setSelectedStoreState(slug);
     if (slug) localStorage.setItem('selected_store', slug);
     else localStorage.removeItem('selected_store');
+    applyStoreTheme(slug);
   };
 
   const [loading, setLoading] = useState(false);
@@ -76,6 +143,7 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
         setSelectedLocationName(e.newValue);
       } else if (e.key === 'selected_store') {
         setSelectedStoreState(e.newValue);
+        applyStoreTheme(e.newValue);
       }
     };
     window.addEventListener('storage', handleStorage);
