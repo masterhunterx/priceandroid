@@ -228,7 +228,9 @@ def list_deals(
         )
         if store:
             q = q.filter(Store.slug == store)
-        discounted = q.order_by(Price.scraped_at.desc()).limit((limit + offset) * 3).all()
+        # Fijamos un pool grande (500) para que la deduplicación y la paginación
+        # funcionen correctamente sin depender del offset del cliente.
+        discounted = q.order_by(Price.scraped_at.desc()).limit(500).all()
 
         seen_products = set()
         all_deals = []

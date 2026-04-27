@@ -120,11 +120,12 @@ const Home: React.FC = () => {
         setDeals(newDeals);
         setDealsOffset(nextOffset);
       } else {
-        refreshNotifications().catch(() => {});
-        const firstPage = filterByStore(
-          await getDeals(DEALS_PAGE_SIZE, 0, selectedStore ?? undefined)
+        // Sin más páginas: traer un pool amplio, mezclar y mostrar para dar variedad
+        const pool = filterByStore(
+          await getDeals(DEALS_PAGE_SIZE * 5, 0, selectedStore ?? undefined)
         );
-        setDeals(firstPage);
+        const shuffled = [...pool].sort(() => Math.random() - 0.5);
+        setDeals(shuffled.slice(0, DEALS_PAGE_SIZE));
         setDealsOffset(0);
       }
     } catch (err) {
