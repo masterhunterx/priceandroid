@@ -8,7 +8,7 @@ import { toast } from 'react-hot-toast';
 import { useLocation } from '../context/LocationContext';
 import { useCart } from '../context/CartContext';
 
-/** Genera URL de búsqueda en la tienda usando solo palabras clave del nombre */
+/** Genera URL de búsqueda abreviada (3 palabras clave) para el botón "Buscar en tienda" */
 function buildStoreSearchUrl(storeSlug: string, productName: string): string {
   let clean = productName.replace(/\b\d+[\d.,]*\s*(kg|g|ml|l|lt|un|cc|oz|pack)\b/gi, '');
   clean = clean.replace(/\b(sin|con|extra|ultra|super|light|zero|plus|mini|maxi|especial|original|clásico|clasico|natural|premium)\b/gi, '');
@@ -16,15 +16,27 @@ function buildStoreSearchUrl(storeSlug: string, productName: string): string {
     || productName.split(' ').slice(0, 2).join(' ');
   const q = encodeURIComponent(words);
   const slug = storeSlug.toLowerCase().replace(/[-_]/g, '');
-  // URLs verificadas contra scrapers internos
   switch (slug) {
     case 'jumbo':        return `https://www.jumbo.cl/buscar?query=${q}`;
-    case 'santaisabel':  return `https://www.santaisabel.cl/busqueda?ft=${q}`;  // parámetro ft, no query
+    case 'santaisabel':  return `https://www.santaisabel.cl/busqueda?ft=${q}`;
     case 'lider':        return `https://www.lider.cl/supermercado/search?currentPage=0&pageSize=40&query=${q}`;
     case 'unimarc':      return `https://www.unimarc.cl/busqueda?q=${q}`;
     default:             return `https://www.google.com/search?q=${encodeURIComponent(words + ' supermercado')}`;
   }
 }
+
+/** Para VTEX (Jumbo/Santa Isabel): búsqueda con nombre completo — más precisa que 3 palabras */
+function buildVtexFullSearchUrl(storeSlug: string, productName: string): string {
+  const q = encodeURIComponent(productName.trim());
+  const slug = storeSlug.toLowerCase().replace(/[-_]/g, '');
+  switch (slug) {
+    case 'jumbo':       return `https://www.jumbo.cl/buscar?query=${q}`;
+    case 'santaisabel': return `https://www.santaisabel.cl/busqueda?ft=${q}`;
+    default:            return '';
+  }
+}
+
+const VTEX_STORES = new Set(['jumbo', 'santaisabel']);
 
 
 const ProductDetails: React.FC = () => {
@@ -521,31 +533,47 @@ const ProductDetails: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    {pricePoint.in_stock && (
-                      <div className="mt-3 flex gap-2">
-                        {/* Búsqueda en tienda — siempre funciona */}
-                        <a
-                          href={buildStoreSearchUrl(pricePoint.store_slug, product.name)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center gap-1 text-[10px] text-primary font-bold uppercase tracking-widest border border-primary/30 rounded-lg py-1.5 hover:bg-primary/10 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-[13px]">search</span>
-                          Buscar en tienda
-                        </a>
-                        {pricePoint.product_url && (
-                          <a
-                            href={pricePoint.product_url.startsWith('http') ? pricePoint.product_url : `https://${pricePoint.product_url}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-[13px]">open_in_new</span>
-                            Ver producto
-                          </a>
-                        )}
-                      </div>
-                    )}
+                    {pricePoint.in_stock && (() => {
+                        const storeSlugNorm = (pricePoint.store_slug ?? '').toLowerCase().replace(/[-_]/g, '');
+                        const isVtex = VTEX_STORES.has(storeSlugNorm);
+                        const directUrl = pricePoint.product_url
+                          ? (pricePoint.product_url.startsWith('http') ? pricePoint.product_url : `https://${pricePoint.product_url}`)
+                          : null;
+                        return (
+                          <div className="mt-3 flex gap-2">
+                            <a
+                              href={buildStoreSearchUrl(pricePoint.store_slug, product.name)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 flex items-center justify-center gap-1 text-[10px] text-primary font-bold uppercase tracking-widest border border-primary/30 rounded-lg py-1.5 hover:bg-primary/10 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">search</span>
+                              Buscar en tienda
+                            </a>
+                            {isVtex ? (
+                              <a
+                                href={buildVtexFullSearchUrl(storeSlugNorm, product.name)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">storefront</span>
+                                Ver en tienda
+                              </a>
+                            ) : directUrl ? (
+                              <a
+                                href={directUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                                Ver producto
+                              </a>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
                   </div>
                 );
               })}
