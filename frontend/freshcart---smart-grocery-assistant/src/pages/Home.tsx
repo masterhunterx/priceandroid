@@ -81,7 +81,15 @@ const Home: React.FC = () => {
           getHistoricLows(5)
         ]);
 
-        if (results[0].status === 'fulfilled') setDeals(results[0].value);
+        if (results[0].status === 'fulfilled') {
+          const apiDeals = results[0].value;
+          // Guardia client-side: descartar cualquier deal de otra tienda por
+          // si el backend devuelve datos cacheados o el filtro falla.
+          setDeals(selectedStore
+            ? apiDeals.filter(d => d.store_slug === selectedStore)
+            : apiDeals
+          );
+        }
         if (results[1].status === 'fulfilled') setCategories(results[1].value);
         if (results[2].status === 'fulfilled') setHistoricLows(results[2].value);
       } catch (error) {
@@ -94,18 +102,25 @@ const Home: React.FC = () => {
     loadData();
   }, [selectedStore]);
 
+  const filterByStore = (raw: typeof deals) =>
+    selectedStore ? raw.filter(d => d.store_slug === selectedStore) : raw;
+
   const handleRefreshDeals = async () => {
     if (refreshingDeals) return;
     setRefreshingDeals(true);
     try {
       const nextOffset = dealsOffset + DEALS_PAGE_SIZE;
-      const newDeals = await getDeals(DEALS_PAGE_SIZE, nextOffset, selectedStore ?? undefined);
+      const newDeals = filterByStore(
+        await getDeals(DEALS_PAGE_SIZE, nextOffset, selectedStore ?? undefined)
+      );
       if (newDeals.length > 0) {
         setDeals(newDeals);
         setDealsOffset(nextOffset);
       } else {
         refreshNotifications().catch(() => {});
-        const firstPage = await getDeals(DEALS_PAGE_SIZE, 0, selectedStore ?? undefined);
+        const firstPage = filterByStore(
+          await getDeals(DEALS_PAGE_SIZE, 0, selectedStore ?? undefined)
+        );
         setDeals(firstPage);
         setDealsOffset(0);
       }
