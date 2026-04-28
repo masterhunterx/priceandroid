@@ -161,7 +161,6 @@ const ProductDetails: React.FC = () => {
       });
       toast.success('Agregado al carro', { icon: '🛒', style: { borderRadius: '10px', background: '#333', color: '#fff' } });
     }
-    toggleFavorite(product.id).catch(() => {});
   };
 
   if (loading) {
@@ -576,27 +575,39 @@ const ProductDetails: React.FC = () => {
       </main>
 
       {/* Sticky Footer — bottom-20 para quedar sobre el BottomNav (h-20) */}
-      <div className="fixed bottom-20 left-0 right-0 z-30 p-4 bg-white/90 dark:bg-[#102217]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800">
-        <div className="max-w-md mx-auto flex items-center gap-4">
-          <div className="flex flex-col">
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Mejor Precio</span>
-            <span className="text-2xl font-bold text-primary">{formatCurrency(product.best_price)}</span>
+      {(() => {
+        const hasStock = product.best_price != null;
+        return (
+          <div className="fixed bottom-20 left-0 right-0 z-30 p-4 bg-white/90 dark:bg-[#102217]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800">
+            <div className="max-w-md mx-auto flex items-center gap-4">
+              <div className="flex flex-col">
+                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                  {hasStock ? 'Mejor Precio' : 'Stock'}
+                </span>
+                <span className={`text-2xl font-bold ${hasStock ? 'text-primary' : 'text-red-500'}`}>
+                  {hasStock ? formatCurrency(product.best_price) : 'Sin Stock'}
+                </span>
+              </div>
+              <button
+                onClick={handleAddToCart}
+                disabled={!hasStock}
+                className={`flex-1 font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all ${
+                  !hasStock
+                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
+                    : isInCart(product.id)
+                    ? 'bg-red-500 text-white shadow-red-500/20 active:scale-95'
+                    : 'bg-primary text-background-dark shadow-primary/20 active:scale-95'
+                }`}
+              >
+                <span className="material-symbols-outlined">
+                  {!hasStock ? 'inventory_2' : isInCart(product.id) ? 'remove_shopping_cart' : 'add_shopping_cart'}
+                </span>
+                {!hasStock ? 'No disponible' : isInCart(product.id) ? 'Quitar del carro' : 'Agregar al carro'}
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleAddToCart}
-            className={`flex-1 font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all ${
-              isInCart(product.id)
-                ? 'bg-red-500 text-white shadow-red-500/20'
-                : 'bg-primary text-background-dark shadow-primary/20'
-            }`}
-          >
-            <span className="material-symbols-outlined">
-              {isInCart(product.id) ? 'remove_shopping_cart' : 'add_shopping_cart'}
-            </span>
-            {isInCart(product.id) ? 'Quitar del carro' : 'Agregar al carro'}
-          </button>
-        </div>
-      </div>
+        );
+      })()}
     </div>
   );
 };

@@ -176,8 +176,6 @@ def build_price_points(
         p_info = analyze_promo(promo_desc)
         curr_price = latest.price if latest else None
         is_club = p_info["offer_type"] == "card"
-        price_based_in_stock = bool(latest and latest.price and latest.price > 0)
-
         # Staleness: datos sin refrescar más de 6 horas
         _STALE_HOURS = 6
         is_stale = False
@@ -197,7 +195,7 @@ def build_price_points(
             promo_price=latest.promo_price if latest else None,
             promo_description=promo_desc,
             has_discount=latest.has_discount if latest else False,
-            in_stock=sp.in_stock or price_based_in_stock,
+            in_stock=sp.in_stock,
             product_url=sp.product_url or "",
             last_sync=sp.last_sync.isoformat() if sp.last_sync else "",
             is_card_price=p_info["is_card"],

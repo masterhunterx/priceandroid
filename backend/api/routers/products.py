@@ -169,9 +169,9 @@ def _enrich_results(
                 price_per_unit=sp.unit_price_norm,
                 unit_label=_infer_unit_label(sp.measurement_unit),
             )],
-            best_price=price_val,
-            best_store=sp.store.name,
-            best_store_slug=sp.store.slug,
+            best_price=price_val if sp.in_stock else None,
+            best_store=sp.store.name if sp.in_stock else None,
+            best_store_slug=sp.store.slug if sp.in_stock else None,
             is_favorite=False,
         ))
 
@@ -389,9 +389,9 @@ def get_product(
         except json.JSONDecodeError:
             pass  # Header malformado, se ignora
 
-    # Lógica para productos específicos de tienda (unmatched)
-    if product_id >= 1000000:
-        sp_id = product_id - 1000000
+    # Lógica para productos específicos de tienda (unmatched): IDs negativos → -(sp.id)
+    if product_id < 0:
+        sp_id = -product_id
         with get_session() as session:
             sp = session.get(StoreProduct, sp_id)
             if not sp:
@@ -437,9 +437,9 @@ def get_product(
                 category_path=sp.category_path or "",
                 image_url=sp.image_url or "",
                 prices=price_points,
-                best_price=latest.price if latest else None,
-                best_store=sp.store.name,
-                best_store_slug=sp.store.slug,
+                best_price=latest.price if (latest and sp.in_stock) else None,
+                best_store=sp.store.name if sp.in_stock else None,
+                best_store_slug=sp.store.slug if sp.in_stock else None,
                 price_history=[], 
                 price_insight=None,
                 is_favorite=False,
@@ -503,8 +503,8 @@ def sync_product_details(product_id: int):
     """Fuerza la sincronización en tiempo real de los precios de un producto."""
     from domain.ingest import sync_single_store_product
     with get_session() as session:
-        if product_id >= 1000000:
-            sp_target_id = product_id - 1000000
+        if product_id < 0:
+            sp_target_id = -product_id
             store_products = [session.get(StoreProduct, sp_target_id)]
         else:
             store_products = session.query(StoreProduct).filter_by(product_id=product_id).all()
