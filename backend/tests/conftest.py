@@ -30,6 +30,18 @@ def api_client():
             yield client
 
 
+@pytest.fixture(scope="module")
+def api_client_no_raise():
+    """TestClient para tests de errores HTTP — absorbe excepciones del servidor."""
+    with patch("api.main.start_background_agents", return_value=None), \
+         patch("core.discord_bot.bot", MagicMock()), \
+         patch("core.discord_bot.DISCORD_BOT_TOKEN", ""):
+        from fastapi.testclient import TestClient
+        from api.main import app
+        with TestClient(app, raise_server_exceptions=False) as client:
+            yield client
+
+
 @pytest.fixture
 def headers():
     return {"X-API-Key": os.environ["API_KEY"]}

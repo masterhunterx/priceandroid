@@ -261,7 +261,7 @@ def list_deals(
                 discount_pct = round((1 - price.price / price.list_price) * 100, 1)
 
             all_deals.append(DealOut(
-                product_id=sp.product_id if sp.product_id else (1000000 + sp.id),
+                product_id=sp.product_id if sp.product_id else -(sp.id),
                 product_name=sp.name,
                 brand=sp.brand or "",
                 category=sp.top_category or "",

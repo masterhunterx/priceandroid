@@ -153,6 +153,9 @@ def _get_approval_if_valid(username: str) -> dict | None:
 # oportunísticamente en cada consulta de _is_token_revoked.
 _revoked_tokens: dict[tuple, float] = {}
 _revoked_lock = Lock()
+# Cap duro: un atacante que llame /logout repetidamente no puede agotar la RAM.
+# ACCESS_EXP=8h → máximo 10_000 tokens revocados simultáneamente en ventana de 8h.
+_RL_MAX_REVOKED = 10_000
 
 
 def _revoke_token(payload: dict) -> None:
@@ -163,6 +166,17 @@ def _revoke_token(payload: dict) -> None:
     if hasattr(exp, "timestamp"):
         exp = exp.timestamp()
     with _revoked_lock:
+        if len(_revoked_tokens) >= _RL_MAX_REVOKED:
+            now = time.time()
+            # Primero limpiar expirados (sin costo de escritura en BD)
+            expired = [k for k, e in _revoked_tokens.items() if e < now]
+            for k in expired:
+                del _revoked_tokens[k]
+            # Si sigue lleno, eliminar los que expiran antes (menos valiosos)
+            if len(_revoked_tokens) >= _RL_MAX_REVOKED:
+                soonest = sorted(_revoked_tokens.items(), key=lambda x: x[1])
+                for k, _ in soonest[: len(_revoked_tokens) - _RL_MAX_REVOKED + 1]:
+                    del _revoked_tokens[k]
         _revoked_tokens[(sub, iat)] = float(exp)
 
 

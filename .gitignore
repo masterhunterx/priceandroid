@@ -62,14 +62,18 @@ backend/**/*.sql
 backend/**/*.log
 backend/data/grocery.db*
 
-# Exception: README.md, Project_Architecture_Blueprint.md and other .md files
+# Markdown y PNG: ignorar por defecto, excepciones explícitas
+# Orden importa: la última regla que coincide gana
+*.md
+*.png
 !README.md
+!CONTRIBUTING.md
 !Project_Architecture_Blueprint.md
 !Data_Structures.md
 !Backend_Audit_Report_27_03_2026.md
 !App Supermercado - Ingestion Pipeline.png
-*.md
-*.png   
+!docs/
+!docs/*.md
 
 # temp
 tmp/
