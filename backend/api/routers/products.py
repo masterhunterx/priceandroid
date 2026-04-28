@@ -67,11 +67,114 @@ def _set_cached(key: str, value):
         _search_cache[key] = (time.time(), value)
 
 def _strip_accents(text: str) -> str:
-    """Elimina acentos de una cadena de texto para normalización de búsqueda."""
     return ''.join(
         c for c in unicodedata.normalize('NFD', text)
         if unicodedata.category(c) != 'Mn'
     )
+
+
+def _build_text_filter(query_obj, q: str):
+    """Aplica filtro de búsqueda resiliente a acentos y errores tipográficos en vocales."""
+    tok = _strip_accents(q.strip().lower())
+    tok_esc = tok.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+    pattern = f"%{re.sub(r'[aeiou]', '_', tok_esc)}%"
+    return query_obj.filter(
+        (func.lower(StoreProduct.name).like(pattern, escape='\\')) |
+        (func.lower(StoreProduct.brand).like(pattern, escape='\\'))
+    )
+
+
+_CATEGORY_STOP = frozenset({'y', 'de', 'del', 'la', 'las', 'el', 'los', 'a', 'e'})
+
+def _build_category_filter(query_obj, category: str):
+    """Aplica filtro de categoría usando OR de palabras significativas."""
+    cat_lower = category.strip().lower()
+    cat_esc = cat_lower.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+    sig_words = [
+        w.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        for w in cat_lower.split()
+        if w not in _CATEGORY_STOP and len(w) >= 3
+    ]
+    conditions = [
+        func.lower(StoreProduct.top_category).like(f"%{cat_esc}%", escape='\\'),
+        func.lower(StoreProduct.category_path).like(f"%{cat_esc}%", escape='\\'),
+    ] + [
+        func.lower(StoreProduct.top_category).like(f"%{w}%", escape='\\')
+        for w in sig_words
+    ] + [
+        func.lower(StoreProduct.category_path).like(f"%{w}%", escape='\\')
+        for w in sig_words
+    ]
+    return query_obj.filter(or_(*conditions))
+
+
+def _enrich_results(
+    session, page_items, store, branch_map,
+    bulk_prices, canonical_products, bulk_insights, fav_product_ids,
+):
+    """Construye la lista de ProductOut a partir de los store_products paginados."""
+    results = []
+    seen_canonical_ids: set = set()
+
+    for sp in page_items:
+        if sp.product_id:
+            if sp.product_id in seen_canonical_ids:
+                continue
+            p = canonical_products.get(sp.product_id)
+            if p:
+                seen_canonical_ids.add(p.id)
+                price_points = build_price_points(
+                    session, p.id, branch_context=branch_map, preloaded_prices=bulk_prices,
+                )
+                if store:
+                    price_points = [pp for pp in price_points if pp.store_slug == store]
+                if price_points:
+                    best_price_val, b_store, b_store_slug = best_price_info(price_points)
+                    results.append(ProductOut(
+                        id=p.id,
+                        name=p.canonical_name,
+                        brand=p.brand or "",
+                        category=p.category or "",
+                        image_url=p.image_url or "",
+                        weight_value=p.weight_value,
+                        weight_unit=p.weight_unit,
+                        prices=price_points,
+                        best_price=best_price_val,
+                        best_store=b_store,
+                        best_store_slug=b_store_slug,
+                        price_insight=bulk_insights.get(p.id),
+                        is_favorite=p.id in fav_product_ids,
+                    ))
+                    continue
+
+        # Fallback para productos no emparejados (unmatched)
+        latest_price_obj = sp.latest_price
+        price_val = latest_price_obj.price if latest_price_obj else 0
+        results.append(ProductOut(
+            id=1000000 + sp.id,
+            name=sp.name,
+            brand=sp.brand or "",
+            category=sp.top_category or "",
+            image_url=sp.image_url or "",
+            prices=[PricePointOut(
+                store_id=sp.store_id,
+                store_name=sp.store.name,
+                store_slug=sp.store.slug,
+                store_logo=sp.store.logo_url or "",
+                price=price_val,
+                in_stock=sp.in_stock,
+                last_sync=sp.last_sync.isoformat() if sp.last_sync else "",
+                price_per_unit=sp.unit_price_norm,
+                unit_label=_infer_unit_label(sp.measurement_unit),
+            )],
+            best_price=price_val,
+            best_store=sp.store.name,
+            best_store_slug=sp.store.slug,
+            is_favorite=False,
+        ))
+
+    return results
+
 
 def _logged_jit_sync(product_id: int, branch_context=None):
     try:
@@ -84,108 +187,64 @@ def search_products(
     q: str = Query("", description="Término de búsqueda"),
     store: Optional[str] = Query(None, description="Filtrar por slug de tienda"),
     category: Optional[str] = Query(None, description="Filtrar por categoría"),
-    in_stock: Optional[bool] = Query(True, description="Solo productos en stock (False para ver todos)"),
+    in_stock: Optional[bool] = Query(True, description="Solo productos en stock"),
     sort: str = Query("price_asc", description="Ordenar: price_asc, price_desc, name"),
     page: int = Query(1, ge=1, description="Página"),
     page_size: int = Query(20, ge=1, le=100, description="Resultados por página"),
     x_branch_context: Optional[str] = Header(None, alias="X-Branch-Context"),
     current_user: str = Depends(get_api_key),
 ):
-    """
-    Motor de Búsqueda KAIROS: Busca productos en todas las tiendas,
-    aplicando lógica resiliente a errores tipográficos y optimizando las consultas SQL.
-    """
-    # Validación básica de entrada
+    """Motor de Búsqueda KAIROS: búsqueda resiliente multi-tienda con caché y precarga bulk."""
     q = q.strip()
     if len(q) > 100:
         raise HTTPException(status_code=400, detail="El término de búsqueda es demasiado largo.")
+    if category and len(category) > 100:
+        raise HTTPException(status_code=400, detail="El filtro de categoría es demasiado largo.")
 
-    # Caché de búsqueda — evita queries repetidas dentro del TTL
-    _cache_key = f"{q}|{store}|{category}|{sort}|{page}|{page_size}"
-    cached = _get_cached(_cache_key)
+    cache_key = f"{q}|{store}|{category}|{sort}|{page}|{page_size}"
+    cached = _get_cached(cache_key)
     if cached is not None:
         return cached
 
-    # Tracking de búsquedas — Prometheus + contador de trending
     if q and current_user and len(current_user) <= 30:
         try:
             from core.metrics import user_searches_total
             user_searches_total.labels(username=current_user).inc()
         except Exception as _e:
-            logger.debug(f"[search] metrics no disponibles: {_e}")
+            logger.debug(f"[search] metrics: {_e}")
     if q:
         try:
             from .deals import track_search_term
             track_search_term(q)
         except Exception as _e:
-            logger.debug(f"[search] track_search_term falló: {_e}")
+            logger.debug(f"[search] track: {_e}")
 
     branch_map = None
     if x_branch_context:
         try:
             branch_map = json.loads(x_branch_context)
         except json.JSONDecodeError:
-            pass  # Header malformado, se ignora y se procede sin contexto de sucursal
+            pass
 
     with get_session() as session:
-        # Optimizamos la consulta con joinedload para evitar N+1 queries
-        main_query = session.query(StoreProduct).options(
+        base_q = session.query(StoreProduct).options(
             joinedload(StoreProduct.product),
-            joinedload(StoreProduct.store)
+            joinedload(StoreProduct.store),
         )
-        
         if q:
-            tok_lower = q.strip().lower()
-            tok_stripped = _strip_accents(tok_lower)
-            # Escapar metacaracteres SQL (\ % _) del término del usuario ANTES de añadir wildcards.
-            # Si no se hace esto, un guión bajo ingresado por el usuario actúa como comodín SQL.
-            tok_escaped = tok_stripped.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
-            # Resiliencia fonética: sustituir vocales por '_' (un carácter cualquiera) para
-            # tolerar errores tipográficos en vocales (ej. "lech" → "l_ch_").
-            vowel_pattern = re.sub(r'[aáeéiíoóuúü]', '_', tok_escaped)
-            term_resilient = f"%{vowel_pattern}%"
-
-            main_query = main_query.filter(
-                (func.lower(StoreProduct.name).like(term_resilient, escape='\\')) |
-                (func.lower(StoreProduct.brand).like(term_resilient, escape='\\'))
-            )
-        
+            base_q = _build_text_filter(base_q, q)
         if in_stock is not None:
-            main_query = main_query.filter(StoreProduct.in_stock == in_stock)
-
+            base_q = base_q.filter(StoreProduct.in_stock == in_stock)
         if category:
-            if len(category) > 100:
-                raise HTTPException(status_code=400, detail="El filtro de categoría es demasiado largo.")
-            _STOP = {'y', 'de', 'del', 'la', 'las', 'el', 'los', 'a', 'e'}
-            cat_lower = category.strip().lower()
-            cat_esc = cat_lower.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
-            # Palabras significativas del nombre canónico (sin stopwords, mín 3 chars)
-            sig_words = [
-                w.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
-                for w in cat_lower.split()
-                if w not in _STOP and len(w) >= 3
-            ]
-            conditions = [
-                func.lower(StoreProduct.top_category).like(f"%{cat_esc}%", escape='\\'),
-                func.lower(StoreProduct.category_path).like(f"%{cat_esc}%", escape='\\'),
-            ] + [
-                func.lower(StoreProduct.top_category).like(f"%{w}%", escape='\\')
-                for w in sig_words
-            ] + [
-                func.lower(StoreProduct.category_path).like(f"%{w}%", escape='\\')
-                for w in sig_words
-            ]
-            main_query = main_query.filter(or_(*conditions))
-            
+            base_q = _build_category_filter(base_q, category)
         if store:
-            main_query = main_query.filter(StoreProduct.store.has(slug=store))
+            base_q = base_q.filter(StoreProduct.store.has(slug=store))
 
-        total = main_query.count()
+        total = base_q.count()
         offset = (page - 1) * page_size
 
         if sort in ("price_asc", "price_desc"):
-            # JOIN con subquery de último precio para ordenar en SQL — elimina el sort en memoria
-            latest_price_sq = (
+            price_sq = (
                 session.query(
                     Price.store_product_id.label("sp_id"),
                     func.min(Price.price).label("min_price"),
@@ -194,123 +253,52 @@ def search_products(
                 .group_by(Price.store_product_id)
                 .subquery("lp")
             )
-            ordered_query = main_query.outerjoin(
-                latest_price_sq, StoreProduct.id == latest_price_sq.c.sp_id
-            )
+            ordered = base_q.outerjoin(price_sq, StoreProduct.id == price_sq.c.sp_id)
             if sort == "price_asc":
-                ordered_query = ordered_query.order_by(latest_price_sq.c.min_price.asc().nullslast())
+                ordered = ordered.order_by(price_sq.c.min_price.asc().nullslast())
             else:
-                ordered_query = ordered_query.order_by(latest_price_sq.c.min_price.desc().nullsfirst())
-            store_prods_sample = ordered_query.limit(page_size).offset(offset).all()
+                ordered = ordered.order_by(price_sq.c.min_price.desc().nullsfirst())
+            page_items = ordered.limit(page_size).offset(offset).all()
         elif sort == "name":
-            store_prods_sample = main_query.order_by(StoreProduct.name.asc()).limit(page_size).offset(offset).all()
+            page_items = base_q.order_by(StoreProduct.name.asc()).limit(page_size).offset(offset).all()
         else:
-            store_prods_sample = main_query.order_by(StoreProduct.id.asc()).limit(page_size).offset(offset).all()
+            page_items = base_q.order_by(StoreProduct.id.asc()).limit(page_size).offset(offset).all()
 
-        # ── Precarga bulk: precios y favoritos — elimina N+1 queries ────────────
+        # Precarga bulk — una query por tipo, sin N+1
         canonical_products = {
-            sp.product_id: sp.product
-            for sp in store_prods_sample
-            if sp.product_id and sp.product
+            sp.product_id: sp.product for sp in page_items if sp.product_id and sp.product
         }
-        # Todos los StoreProduct de los productos canónicos encontrados
+        all_sp_ids = []
         if canonical_products:
-            all_related_sps = (
-                session.query(StoreProduct)
-                .filter(StoreProduct.product_id.in_(canonical_products.keys()))
-                .all()
-            )
-            all_sp_ids = [s.id for s in all_related_sps]
-        else:
-            all_sp_ids = []
+            all_sp_ids = [
+                s.id for s in session.query(StoreProduct)
+                .filter(StoreProduct.product_id.in_(canonical_products.keys())).all()
+            ]
 
-        # Una sola query para todos los últimos precios
-        bulk_prices = preload_latest_prices(session, all_sp_ids) if all_sp_ids else {}
-
-        # Una sola query para todos los insights de precio
+        bulk_prices   = preload_latest_prices(session, all_sp_ids) if all_sp_ids else {}
         bulk_insights = preload_price_insights(session, list(canonical_products.keys())) if canonical_products else {}
 
-        # Una sola query para todos los favoritos
         fav_product_ids: set = set()
         if canonical_products:
             fav_rows = (
                 session.query(UserPreference.product_id)
-                .filter(UserPreference.product_id.in_(canonical_products.keys()))
+                .filter(
+                    UserPreference.product_id.in_(canonical_products.keys()),
+                    UserPreference.user_id == current_user,
+                )
                 .all()
             )
             fav_product_ids = {r[0] for r in fav_rows}
 
-        results = []
-        seen_canonical_ids = set()
-
-        for sp in store_prods_sample:
-            if sp.product_id:
-                if sp.product_id in seen_canonical_ids:
-                    continue
-                p = canonical_products.get(sp.product_id)
-                if p:
-                    seen_canonical_ids.add(p.id)
-                    price_points = build_price_points(
-                        session, p.id,
-                        branch_context=branch_map,
-                        preloaded_prices=bulk_prices,
-                    )
-                    if store:
-                        price_points = [pp for pp in price_points if pp.store_slug == store]
-                    if price_points:
-                        best_price_val, b_store, b_store_slug = best_price_info(price_points)
-                        results.append(ProductOut(
-                            id=p.id,
-                            name=p.canonical_name,
-                            brand=p.brand or "",
-                            category=p.category or "",
-                            image_url=p.image_url or "",
-                            weight_value=p.weight_value,
-                            weight_unit=p.weight_unit,
-                            prices=price_points,
-                            best_price=best_price_val,
-                            best_store=b_store,
-                            best_store_slug=b_store_slug,
-                            price_insight=bulk_insights.get(p.id),
-                            is_favorite=p.id in fav_product_ids,
-                        ))
-                        continue
-
-            # Fallback para productos no emparejados (unmatched)
-            latest_price_obj = sp.latest_price
-            price_val = latest_price_obj.price if latest_price_obj else 0
-            results.append(ProductOut(
-                id=1000000 + sp.id,
-                name=sp.name,
-                brand=sp.brand or "",
-                category=sp.top_category or "",
-                image_url=sp.image_url or "",
-                prices=[PricePointOut(
-                    store_id=sp.store_id,
-                    store_name=sp.store.name,
-                    store_slug=sp.store.slug,
-                    store_logo=sp.store.logo_url or "",
-                    price=price_val,
-                    in_stock=sp.in_stock,
-                    last_sync=sp.last_sync.isoformat() if sp.last_sync else "",
-                    price_per_unit=sp.unit_price_norm,
-                    unit_label=_infer_unit_label(sp.measurement_unit),
-                )],
-                best_price=price_val,
-                best_store=sp.store.name,
-                best_store_slug=sp.store.slug,
-                is_favorite=False
-            ))
-
-        # Para name/default el orden ya viene del SQL; price_asc/desc también — no hay sort en memoria
+        results = _enrich_results(
+            session, page_items, store, branch_map,
+            bulk_prices, canonical_products, bulk_insights, fav_product_ids,
+        )
 
         response = UnifiedResponse(data=SearchResponse(
-            results=results[:page_size],
-            total=total,
-            page=page,
-            page_size=page_size,
+            results=results[:page_size], total=total, page=page, page_size=page_size,
         ))
-        _set_cached(_cache_key, response)
+        _set_cached(cache_key, response)
         return response
 
 @router.get("/suggestions", response_model=UnifiedResponse)
@@ -381,9 +369,10 @@ def get_search_suggestions(q: str = Query("", min_length=1)):
 
 @router.get("/{product_id}", response_model=UnifiedResponse)
 def get_product(
-    product_id: int, 
+    product_id: int,
     background_tasks: BackgroundTasks,
-    x_branch_context: Optional[str] = Header(None, alias="X-Branch-Context")
+    x_branch_context: Optional[str] = Header(None, alias="X-Branch-Context"),
+    current_user: str = Depends(get_api_key),
 ):
     """
     Obtener detalle completo de un producto por su ID.
@@ -502,7 +491,7 @@ def get_product(
             best_store_slug=b_store_slug,
             price_history=price_history,
             price_insight=get_price_insight(session, product.id),
-            is_favorite=check_favorite(session, product.id),
+            is_favorite=check_favorite(session, product.id, user_id=current_user),
         ))
 
 @router.post("/{product_id}/sync", response_model=UnifiedResponse)

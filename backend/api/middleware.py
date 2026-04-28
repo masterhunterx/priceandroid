@@ -30,8 +30,14 @@ def _register_apikey_failure(ip: str) -> bool:
 
 
 _JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "insecure-default-change-in-production")
+_ENV = os.environ.get("ENVIRONMENT", "production").lower()
 if _JWT_SECRET == "insecure-default-change-in-production":
-    logger.warning("[SECURITY] JWT_SECRET_KEY no está configurada. Usando clave insegura por defecto — NO apta para producción.")
+    if _ENV != "development":
+        raise RuntimeError(
+            "[SECURITY] JWT_SECRET_KEY no configurada. "
+            "Configura la variable de entorno JWT_SECRET_KEY antes de arrancar en producción."
+        )
+    logger.warning("[SECURITY] JWT_SECRET_KEY no configurada — modo desarrollo local.")
 
 def _verify_jwt(token: str) -> str:
     """

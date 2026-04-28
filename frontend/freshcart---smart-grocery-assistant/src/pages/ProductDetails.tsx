@@ -58,15 +58,6 @@ const ProductDetails: React.FC = () => {
       const branchContext = getBranchContext();
       const data = await getProductDetails(numericId, branchContext);
       setProduct(data);
-
-      // Load Smart Substitutes (Fake search by category)
-      if (data.category) {
-        const { searchProducts } = await import('../lib/api');
-        const results = await searchProducts('', data.category, 1, 4, 'price_asc');
-        // Filter out current product and keep cheaper ones or just a few alternatives
-        const others = results.results.filter(p => p.id.toString() !== id.toString());
-        setSubstitutes(others);
-      }
     } catch (error) {
       console.error('Error loading product details:', error);
     } finally {
@@ -77,6 +68,18 @@ const ProductDetails: React.FC = () => {
   useEffect(() => {
     loadProduct();
   }, [id]);
+
+  useEffect(() => {
+    if (!product?.category) return;
+    let cancelled = false;
+    import('../lib/api').then(({ searchProducts }) =>
+      searchProducts('', product.category, 1, 4, 'price_asc')
+    ).then(results => {
+      if (!cancelled)
+        setSubstitutes(results.results.filter(p => p.id.toString() !== id?.toString()));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [product?.id, product?.category]);
 
   const handleSync = async () => {
     if (!id || !product) return;

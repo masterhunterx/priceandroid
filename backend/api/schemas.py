@@ -98,7 +98,6 @@ class DealOut(BaseModel):
     store_slug: str = ""
     store_logo: str = ""
     price: Optional[float] = None
-    current_price: Optional[float] = None  # alias de price para compatibilidad con clientes
     list_price: Optional[float] = None
     promo_price: Optional[float] = None
     promo_description: str = ""

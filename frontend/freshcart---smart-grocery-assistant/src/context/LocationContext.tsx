@@ -119,9 +119,9 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'user_coords') {
-        setCoords(e.newValue ? JSON.parse(e.newValue) : null);
+        try { setCoords(e.newValue ? JSON.parse(e.newValue) : null); } catch {}
       } else if (e.key === 'selected_branches') {
-        setSelectedBranches(e.newValue ? JSON.parse(e.newValue) : null);
+        try { setSelectedBranches(e.newValue ? JSON.parse(e.newValue) : null); } catch {}
       } else if (e.key === 'user_location_name') {
         setSelectedLocationName(e.newValue);
       } else if (e.key === 'selected_store') {

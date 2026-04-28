@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 export interface CartItem {
   product_id: string | number;
@@ -35,19 +35,23 @@ const CartContext = createContext<CartContextType>({
 
 export const useCart = () => useContext(CartContext);
 
-const CART_KEY = 'freshcart_cart_v2';
+const getCartKey = () => {
+  const username = localStorage.getItem('freshcart_username') || 'guest';
+  return `freshcart_cart_v3_${username}`;
+};
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [cartKey] = useState(getCartKey);
   const [items, setItems] = useState<CartItem[]>(() => {
     try {
-      const saved = localStorage.getItem(CART_KEY);
+      const saved = localStorage.getItem(getCartKey());
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
 
   useEffect(() => {
-    try { localStorage.setItem(CART_KEY, JSON.stringify(items)); } catch {}
-  }, [items]);
+    try { localStorage.setItem(cartKey, JSON.stringify(items)); } catch {}
+  }, [cartKey, items]);
 
   const itemCount = items.length;
   const total = items.reduce((s, i) => s + i.price * i.qty, 0);
@@ -79,11 +83,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearCart = useCallback(() => setItems([]), []);
 
-  const isInCart = useCallback(
-    (product_id: string | number) =>
-      items.some(i => String(i.product_id) === String(product_id)),
-    [items],
-  );
+  const cartSet = useMemo(() => new Set(items.map(i => String(i.product_id))), [items]);
+  const isInCart = useCallback((product_id: string | number) => cartSet.has(String(product_id)), [cartSet]);
 
   return (
     <CartContext.Provider value={{ items, itemCount, total, addItem, removeItem, updateQty, clearCart, isInCart }}>

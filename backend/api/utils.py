@@ -252,9 +252,12 @@ def get_price_insight(db_session, product_id: int) -> Optional[PriceInsightOut]:
     )
 
 
-def check_favorite(db_session, product_id: int) -> bool:
-    """Verifica de forma rápida si un producto está en la lista de favoritos del usuario."""
-    return db_session.query(UserPreference).filter_by(product_id=product_id).first() is not None
+def check_favorite(db_session, product_id: int, user_id: Optional[str] = None) -> bool:
+    """Verifica si un producto está en favoritos del usuario. Filtra por user_id si se provee."""
+    q = db_session.query(UserPreference).filter_by(product_id=product_id)
+    if user_id:
+        q = q.filter_by(user_id=user_id)
+    return q.first() is not None
 
 
 def trigger_jit_sync(product_id: int, branch_context: Optional[Dict[str, str]] = None, block: bool = False):
