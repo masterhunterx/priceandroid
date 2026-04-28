@@ -113,11 +113,17 @@ const Home: React.FC = () => {
             : loadedDeals;
           setDeals(filtered);
 
-          // Si hay pocas ofertas para esta tienda, complementar con productos populares
-          if (filtered.length < 5 && selectedStore) {
+          // Siempre completar hasta 10 items: deals + productos baratos
+          if (filtered.length < 10) {
             try {
-              const { results: ess } = await searchProducts('', undefined, 1, 12, 'price_asc', selectedStore);
-              setEssentialProducts(ess);
+              const { results: ess } = await searchProducts('', undefined, 1, 12, 'price_asc', selectedStore ?? '');
+              if (ess.length >= 3) {
+                setEssentialProducts(ess);
+              } else {
+                // Fallback: sin filtro de tienda (Líder/PerimeterX u otros sin datos frescos)
+                const { results: global } = await searchProducts('', undefined, 1, 12, 'price_asc', '');
+                setEssentialProducts(global);
+              }
             } catch {
               setEssentialProducts([]);
             }
