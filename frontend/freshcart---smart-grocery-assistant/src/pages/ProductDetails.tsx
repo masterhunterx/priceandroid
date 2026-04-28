@@ -107,7 +107,7 @@ const ProductDetails: React.FC = () => {
 
   const handleToggleFavorite = () => {
     if (!product) return;
-    handleAddToCart();
+    toggleFavorite(product.id).catch(() => {});
   };
 
   const handleShare = async () => {
@@ -215,7 +215,7 @@ const ProductDetails: React.FC = () => {
         </div>
       </header>
 
-      <main>
+      <main className="pb-44">
         {/* Image */}
         <div className="px-4 py-2">
           <div className="w-full bg-white dark:bg-slate-800 rounded-xl overflow-hidden min-h-[320px] shadow-lg flex items-center justify-center p-8">
@@ -562,8 +562,8 @@ const ProductDetails: React.FC = () => {
         </div>
       </main>
 
-      {/* Sticky Footer */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-[#102217]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800">
+      {/* Sticky Footer — bottom-20 para quedar sobre el BottomNav (h-20) */}
+      <div className="fixed bottom-20 left-0 right-0 z-30 p-4 bg-white/90 dark:bg-[#102217]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-md mx-auto flex items-center gap-4">
           <div className="flex flex-col">
             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Mejor Precio</span>
