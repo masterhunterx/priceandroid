@@ -87,6 +87,8 @@ const Home: React.FC = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     setDealsOffset(0);
     setDeals([]);
     setEssentialProducts([]);
@@ -95,47 +97,86 @@ const Home: React.FC = () => {
     setBasket([]);
     setLoadingBasket(true);
     setSearchingDeals(true);
-    async function loadData() {
-      try {
-        const results = await Promise.allSettled([
-          getDeals(DEALS_PAGE_SIZE, 0, selectedStore ?? undefined),
-          getCategories(selectedStore ?? undefined),
-          getHistoricLows(5)
-        ]);
 
-        let loadedDeals: Deal[] = [];
-        let loadedLows: HistoricLow[] = [];
+    async function loadAll() {
+      // ── Fase 1: datos principales + canasta en paralelo ──────────────────
+      const BASKET_ESSENTIALS = [
+        { label: 'Leche',  icon: 'local_drink',  terms: ['leche'] },
+        { label: 'Pan',    icon: 'bakery_dining', terms: ['pan de molde', 'pan'] },
+        { label: 'Huevos', icon: 'egg',           terms: ['huevo'] },
+        { label: 'Arroz',  icon: 'rice_bowl',     terms: ['arroz'] },
+        { label: 'Pollo',  icon: 'set_meal',      terms: ['pollo'] },
+        { label: 'Aceite', icon: 'water_drop',    terms: ['aceite'] },
+      ];
 
-        if (results[0].status === 'fulfilled') {
-          loadedDeals = results[0].value;
-          const filtered = selectedStore
-            ? loadedDeals.filter(d => d.store_slug === selectedStore)
-            : loadedDeals;
-          setDeals(filtered);
+      const [dealsRes, catsRes, lowsRes, basketRes] = await Promise.allSettled([
+        getDeals(DEALS_PAGE_SIZE, 0, selectedStore ?? undefined),
+        getCategories(selectedStore ?? undefined),
+        getHistoricLows(5),
+        // Una sola búsqueda amplia para la canasta (en vez de 6 paralelas)
+        searchProducts('', undefined, 1, 50, 'price_asc', selectedStore ?? ''),
+      ]);
 
-          // Siempre completar hasta 10 items: deals + productos baratos
-          if (filtered.length < 10) {
-            try {
-              const { results: ess } = await searchProducts('', undefined, 1, 12, 'price_asc', selectedStore ?? '');
-              if (ess.length >= 3) {
-                setEssentialProducts(ess);
-              } else {
-                // Fallback: sin filtro de tienda (Líder/PerimeterX u otros sin datos frescos)
-                const { results: global } = await searchProducts('', undefined, 1, 12, 'price_asc', '');
-                setEssentialProducts(global);
-              }
-            } catch {
-              setEssentialProducts([]);
-            }
+      if (cancelled) return;
+
+      // ── Categorías ────────────────────────────────────────────────────────
+      if (catsRes.status === 'fulfilled') setCategories(catsRes.value);
+
+      // ── Canasta básica (filtrar localmente el resultado amplio) ────────────
+      if (basketRes.status === 'fulfilled') {
+        const allProds = basketRes.value.results;
+        const usedIds = new Set<number>();
+        const items: BasketItem[] = [];
+        for (const e of BASKET_ESSENTIALS) {
+          const match = allProds.find(p =>
+            !usedIds.has(p.id) &&
+            p.best_price != null &&
+            e.terms.some(t => p.name.toLowerCase().includes(t))
+          );
+          if (match && match.best_price != null) {
+            items.push({ label: e.label, icon: e.icon, productId: match.id, name: match.name, price: match.best_price, imageUrl: match.image_url });
+            usedIds.add(match.id);
           }
         }
-        if (results[1].status === 'fulfilled') setCategories(results[1].value);
-        if (results[2].status === 'fulfilled') {
-          loadedLows = results[2].value;
-          setHistoricLows(loadedLows);
-        }
+        if (!cancelled) setBasket(items);
+      }
+      if (!cancelled) setLoadingBasket(false);
 
-        // Comparar precios actuales contra snapshots guardados → detectar bajadas
+      // ── Deals + essentials fallback ───────────────────────────────────────
+      let loadedDeals: Deal[] = [];
+      let loadedLows: HistoricLow[] = [];
+
+      if (dealsRes.status === 'fulfilled') {
+        loadedDeals = dealsRes.value;
+        const filtered = selectedStore
+          ? loadedDeals.filter(d => d.store_slug === selectedStore)
+          : loadedDeals;
+        if (!cancelled) setDeals(filtered);
+
+        if (filtered.length < 10) {
+          try {
+            // Reusar el resultado de canasta si hay suficientes productos
+            const poolProds = basketRes.status === 'fulfilled' ? basketRes.value.results : [];
+            if (poolProds.length >= 3) {
+              if (!cancelled) setEssentialProducts(poolProds.slice(0, 12));
+            } else {
+              // Fallback explícito sin filtro de tienda
+              const { results: global } = await searchProducts('', undefined, 1, 12, 'price_asc', '');
+              if (!cancelled) setEssentialProducts(global);
+            }
+          } catch {
+            // silencioso
+          }
+        }
+      }
+
+      if (lowsRes.status === 'fulfilled') {
+        loadedLows = lowsRes.value;
+        if (!cancelled) setHistoricLows(loadedLows);
+      }
+
+      // ── Price drops ───────────────────────────────────────────────────────
+      if (!cancelled) {
         const snapshots = readPriceSnapshots();
         const newSnapshots: PriceSnapshotMap = { ...snapshots };
         const dropMap = new Map<number, PriceDropItem>();
@@ -170,45 +211,24 @@ const Home: React.FC = () => {
 
         setPriceDrops([...dropMap.values()].sort((a, b) => b.dropAmount - a.dropAmount));
         writePriceSnapshots(newSnapshots);
-      } catch (error) {
-        console.error('Error loading home data:', error);
-      } finally {
+      }
+
+      if (!cancelled) {
         setSearchingDeals(false);
         setLoading(false);
       }
     }
 
-    async function loadBasket() {
-      const ESSENTIALS = [
-        { label: 'Leche',  icon: 'local_drink',      term: 'leche' },
-        { label: 'Pan',    icon: 'bakery_dining',     term: 'pan de molde' },
-        { label: 'Huevos', icon: 'egg',               term: 'huevos' },
-        { label: 'Arroz',  icon: 'rice_bowl',         term: 'arroz' },
-        { label: 'Pollo',  icon: 'set_meal',          term: 'pollo' },
-        { label: 'Aceite', icon: 'water_drop',        term: 'aceite vegetal' },
-      ];
-      try {
-        const fetches = await Promise.allSettled(
-          ESSENTIALS.map(e => searchProducts(e.term, undefined, 1, 3, 'price_asc', selectedStore ?? ''))
-        );
-        const items: BasketItem[] = [];
-        ESSENTIALS.forEach((e, i) => {
-          if (fetches[i].status !== 'fulfilled') return;
-          const products = (fetches[i] as PromiseFulfilledResult<{ results: Product[] }>).value.results;
-          const p = products.find(x => x.best_price != null);
-          if (!p || p.best_price == null) return;
-          items.push({ label: e.label, icon: e.icon, productId: p.id, name: p.name, price: p.best_price, imageUrl: p.image_url });
-        });
-        setBasket(items);
-      } catch {
-        setBasket([]);
-      } finally {
+    loadAll().catch(err => {
+      if (!cancelled) {
+        console.error('Error loading home data:', err);
+        setSearchingDeals(false);
+        setLoading(false);
         setLoadingBasket(false);
       }
-    }
+    });
 
-    loadData();
-    loadBasket();
+    return () => { cancelled = true; };
   }, [selectedStore]);
 
   const filterByStore = (raw: typeof deals) =>
