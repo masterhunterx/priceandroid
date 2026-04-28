@@ -262,7 +262,9 @@ _base_origins = [
     "http://127.0.0.1:5001",
     "http://localhost:5173",
     "http://localhost:3000",
-    "capacitor://localhost",   # APK Capacitor (Android/iOS)
+    "capacitor://localhost",   # APK Capacitor legacy scheme
+    "https://localhost",        # APK Capacitor Android (androidScheme: https)
+    "http://localhost",         # APK Capacitor Android (androidScheme: http)
     "ionic://localhost",        # Ionic Capacitor
     "https://freshcart-app-beryl.vercel.app",      # Vercel production frontend
 ]
