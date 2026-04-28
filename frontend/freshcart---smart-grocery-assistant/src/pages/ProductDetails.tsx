@@ -38,6 +38,7 @@ const ProductDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [substitutes, setSubstitutes] = useState<Product[]>([]);
+  const [isFavorite, setIsFavorite] = useState(false);
 
   const loadProduct = async (silent = false) => {
     if (!id) return;
@@ -48,6 +49,7 @@ const ProductDetails: React.FC = () => {
       const branchContext = getBranchContext();
       const data = await getProductDetails(numericId, branchContext);
       setProduct(data);
+      setIsFavorite(data.is_favorite ?? false);
       // Guardar snapshot de precio para detección de "Bajó de precio" en Home
       if (data.best_price != null) {
         const snaps = readPriceSnapshots();
@@ -120,7 +122,8 @@ const ProductDetails: React.FC = () => {
 
   const handleToggleFavorite = () => {
     if (!product) return;
-    toggleFavorite(product.id).catch(() => {});
+    setIsFavorite(prev => !prev);
+    toggleFavorite(product.id).catch(() => setIsFavorite(prev => !prev));
   };
 
   const handleShare = async () => {
@@ -208,12 +211,12 @@ const ProductDetails: React.FC = () => {
             <button
               onClick={handleToggleFavorite}
               className={`flex size-10 items-center justify-center rounded-full transition-all active:scale-90 ${
-                isInCart(product.id)
+                isFavorite
                 ? 'bg-red-500/10 text-red-500'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
               }`}
             >
-              <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: isInCart(product.id) ? "'FILL' 1" : "'FILL' 0" }}>
+              <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: isFavorite ? "'FILL' 1" : "'FILL' 0" }}>
                 favorite
               </span>
             </button>
