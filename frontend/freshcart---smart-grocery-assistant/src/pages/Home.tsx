@@ -1,7 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications, searchProducts } from '../lib/api';
+import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications, searchProducts, readPriceSnapshots, writePriceSnapshots, PriceSnapshotMap } from '../lib/api';
 import { Deal, Category, Notification, Branch, Product, HistoricLow } from '../types';
+
+interface PriceDropItem {
+  productId: number;
+  name: string;
+  imageUrl: string;
+  currentPrice: number;
+  previousPrice: number;
+  storeSlug: string;
+  storeName: string;
+  dropAmount: number;
+  dropPercent: number;
+}
 import { useAuth } from '../context/AuthContext';
 import HomeHeader from '../components/HomeHeader';
 
@@ -37,6 +49,7 @@ const Home: React.FC = () => {
   const { username: authUsername } = useAuth();
   const username = authUsername || 'Usuario';
   const [isLocationOpen, setIsLocationOpen] = useState(false);
+  const [priceDrops, setPriceDrops] = useState<PriceDropItem[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [essentialProducts, setEssentialProducts] = useState<Product[]>([]);
   const [historicLows, setHistoricLows] = useState<HistoricLow[]>([]);
@@ -67,6 +80,7 @@ const Home: React.FC = () => {
     setDeals([]);
     setEssentialProducts([]);
     setHistoricLows([]);
+    setPriceDrops([]);
     setSearchingDeals(true);
     async function loadData() {
       try {
@@ -76,11 +90,14 @@ const Home: React.FC = () => {
           getHistoricLows(5)
         ]);
 
+        let loadedDeals: Deal[] = [];
+        let loadedLows: HistoricLow[] = [];
+
         if (results[0].status === 'fulfilled') {
-          const apiDeals = results[0].value;
+          loadedDeals = results[0].value;
           const filtered = selectedStore
-            ? apiDeals.filter(d => d.store_slug === selectedStore)
-            : apiDeals;
+            ? loadedDeals.filter(d => d.store_slug === selectedStore)
+            : loadedDeals;
           setDeals(filtered);
 
           // Si hay pocas ofertas para esta tienda, complementar con productos populares
@@ -94,7 +111,46 @@ const Home: React.FC = () => {
           }
         }
         if (results[1].status === 'fulfilled') setCategories(results[1].value);
-        if (results[2].status === 'fulfilled') setHistoricLows(results[2].value);
+        if (results[2].status === 'fulfilled') {
+          loadedLows = results[2].value;
+          setHistoricLows(loadedLows);
+        }
+
+        // Comparar precios actuales contra snapshots guardados → detectar bajadas
+        const snapshots = readPriceSnapshots();
+        const newSnapshots: PriceSnapshotMap = { ...snapshots };
+        const dropMap = new Map<number, PriceDropItem>();
+
+        const processItem = (
+          productId: number, name: string, imageUrl: string,
+          price: number, storeSlug: string, storeName: string,
+        ) => {
+          const key = String(productId);
+          const old = snapshots[key];
+          if (old && price < old.price * 0.99 && !dropMap.has(productId)) {
+            dropMap.set(productId, {
+              productId, name, imageUrl,
+              currentPrice: price, previousPrice: old.price,
+              storeSlug, storeName,
+              dropAmount: old.price - price,
+              dropPercent: ((old.price - price) / old.price) * 100,
+            });
+          }
+          const existing = newSnapshots[key];
+          if (!existing || price < existing.price) {
+            newSnapshots[key] = { price, storeSlug, storeName, name, imageUrl, savedAt: Date.now() };
+          }
+        };
+
+        for (const deal of loadedDeals) {
+          if (deal.price != null) processItem(deal.product_id, deal.product_name, deal.image_url, deal.price, deal.store_slug, deal.store_name);
+        }
+        for (const hl of loadedLows) {
+          if (hl.min_price_all_time != null) processItem(hl.product_id, hl.product_name, hl.image_url ?? '', hl.min_price_all_time, hl.store_slug ?? '', hl.store_name);
+        }
+
+        setPriceDrops([...dropMap.values()].sort((a, b) => b.dropAmount - a.dropAmount));
+        writePriceSnapshots(newSnapshots);
       } catch (error) {
         console.error('Error loading home data:', error);
       } finally {
@@ -369,6 +425,53 @@ const Home: React.FC = () => {
           </section>
           );
         })()}
+
+        {/* Bajó de precio */}
+        {priceDrops.length > 0 && (
+          <section className="mt-6 mb-6">
+            <div className="flex items-center justify-between px-4 pb-3">
+              <div>
+                <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">📉 Bajó de precio</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Productos más baratos que la última vez que los viste
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-red-500 text-sm font-semibold">
+                <span className="material-symbols-outlined text-[16px]">arrow_downward</span>
+                Bajan ahora
+              </div>
+            </div>
+            <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar pb-2">
+              {priceDrops.map((drop) => (
+                <div
+                  key={`drop-${drop.productId}`}
+                  onClick={() => navigate(`/product/${drop.productId}`)}
+                  className="flex-none w-52 bg-red-50 dark:bg-red-900/10 rounded-xl overflow-hidden border border-red-200 dark:border-red-800/30 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
+                >
+                  <div className="relative h-28 w-full bg-white dark:bg-slate-900 flex items-center justify-center">
+                    <div className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                      -{Math.round(drop.dropPercent)}%
+                    </div>
+                    <div className="absolute top-2 right-2 z-10 size-6 overflow-hidden">
+                      <StoreLogo slug={drop.storeSlug} name={drop.storeName} className="size-full shadow-sm" />
+                    </div>
+                    <img src={drop.imageUrl} alt={drop.name} className="size-full object-contain p-3 group-hover:scale-110 transition-transform" />
+                  </div>
+                  <div className="p-3">
+                    <h4 className="text-slate-900 dark:text-white text-xs font-bold leading-tight line-clamp-2 mb-2">{drop.name}</h4>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-red-600 dark:text-red-400 text-base font-bold">{formatCurrency(drop.currentPrice)}</span>
+                      <span className="text-slate-400 text-xs line-through">{formatCurrency(drop.previousPrice)}</span>
+                    </div>
+                    <p className="text-red-500 dark:text-red-400 text-[10px] font-bold mt-1">
+                      Ahorrás {formatCurrency(drop.dropAmount)} en {drop.storeName}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Savings Card deshabilitada — KAIROS inactivo */}
       </main>

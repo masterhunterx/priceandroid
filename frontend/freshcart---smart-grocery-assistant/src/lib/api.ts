@@ -370,6 +370,44 @@ export function clearRecentSearches(): void {
   localStorage.removeItem(RECENT_KEY);
 }
 
+// ── Snapshots de precios ───────────────────────────────────────────────────────
+
+const PRICE_SNAPSHOT_KEY = 'freshcart_price_snapshots';
+const MAX_SNAPSHOT_ENTRIES = 50;
+
+export interface PriceSnapshotEntry {
+  price: number;
+  storeSlug: string;
+  storeName: string;
+  name: string;
+  imageUrl: string;
+  savedAt: number;
+}
+
+export type PriceSnapshotMap = Record<string, PriceSnapshotEntry>;
+
+export function readPriceSnapshots(): PriceSnapshotMap {
+  try {
+    return JSON.parse(localStorage.getItem(PRICE_SNAPSHOT_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+export function writePriceSnapshots(map: PriceSnapshotMap): void {
+  try {
+    const entries = Object.entries(map);
+    if (entries.length > MAX_SNAPSHOT_ENTRIES) {
+      entries.sort((a, b) => b[1].savedAt - a[1].savedAt);
+      localStorage.setItem(PRICE_SNAPSHOT_KEY, JSON.stringify(Object.fromEntries(entries.slice(0, MAX_SNAPSHOT_ENTRIES))));
+    } else {
+      localStorage.setItem(PRICE_SNAPSHOT_KEY, JSON.stringify(map));
+    }
+  } catch {
+    // localStorage lleno — ignorar silenciosamente
+  }
+}
+
 // ── Feedback ───────────────────────────────────────────────────────────────────
 
 export async function submitFeedback(

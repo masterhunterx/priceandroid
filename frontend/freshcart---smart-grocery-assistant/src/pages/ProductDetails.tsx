@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BarChart, Bar, ResponsiveContainer, Cell, XAxis, YAxis, Tooltip } from 'recharts';
-import { getProductDetails, formatCurrency, toggleFavorite, syncProduct } from '../lib/api';
+import { getProductDetails, formatCurrency, toggleFavorite, syncProduct, readPriceSnapshots, writePriceSnapshots } from '../lib/api';
 import { Product, PricePoint } from '../types';
 import StoreLogo from '../components/StoreLogo';
 import { toast } from 'react-hot-toast';
@@ -48,6 +48,19 @@ const ProductDetails: React.FC = () => {
       const branchContext = getBranchContext();
       const data = await getProductDetails(numericId, branchContext);
       setProduct(data);
+      // Guardar snapshot de precio para detección de "Bajó de precio" en Home
+      if (data.best_price != null) {
+        const snaps = readPriceSnapshots();
+        snaps[String(data.id)] = {
+          price: data.best_price,
+          storeSlug: data.best_store_slug ?? '',
+          storeName: data.best_store ?? '',
+          name: data.name,
+          imageUrl: data.image_url,
+          savedAt: Date.now(),
+        };
+        writePriceSnapshots(snaps);
+      }
     } catch (error) {
       console.error('Error loading product details:', error);
     } finally {
