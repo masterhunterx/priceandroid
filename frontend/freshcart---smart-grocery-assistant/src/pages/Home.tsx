@@ -3,6 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications, searchProducts, readPriceSnapshots, writePriceSnapshots, PriceSnapshotMap } from '../lib/api';
 import { Deal, Category, Notification, Branch, Product, HistoricLow } from '../types';
 
+interface BasketItem {
+  label: string;
+  icon: string;
+  productId: number;
+  name: string;
+  price: number;
+  imageUrl: string;
+}
+
 interface PriceDropItem {
   productId: number;
   name: string;
@@ -50,6 +59,8 @@ const Home: React.FC = () => {
   const username = authUsername || 'Usuario';
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [priceDrops, setPriceDrops] = useState<PriceDropItem[]>([]);
+  const [basket, setBasket] = useState<BasketItem[]>([]);
+  const [loadingBasket, setLoadingBasket] = useState(true);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [essentialProducts, setEssentialProducts] = useState<Product[]>([]);
   const [historicLows, setHistoricLows] = useState<HistoricLow[]>([]);
@@ -81,6 +92,8 @@ const Home: React.FC = () => {
     setEssentialProducts([]);
     setHistoricLows([]);
     setPriceDrops([]);
+    setBasket([]);
+    setLoadingBasket(true);
     setSearchingDeals(true);
     async function loadData() {
       try {
@@ -158,7 +171,38 @@ const Home: React.FC = () => {
         setLoading(false);
       }
     }
+
+    async function loadBasket() {
+      const ESSENTIALS = [
+        { label: 'Leche',  icon: 'local_drink',      term: 'leche' },
+        { label: 'Pan',    icon: 'bakery_dining',     term: 'pan de molde' },
+        { label: 'Huevos', icon: 'egg',               term: 'huevos' },
+        { label: 'Arroz',  icon: 'rice_bowl',         term: 'arroz' },
+        { label: 'Pollo',  icon: 'set_meal',          term: 'pollo' },
+        { label: 'Aceite', icon: 'water_drop',        term: 'aceite vegetal' },
+      ];
+      try {
+        const fetches = await Promise.allSettled(
+          ESSENTIALS.map(e => searchProducts(e.term, undefined, 1, 3, 'price_asc', selectedStore ?? ''))
+        );
+        const items: BasketItem[] = [];
+        ESSENTIALS.forEach((e, i) => {
+          if (fetches[i].status !== 'fulfilled') return;
+          const products = (fetches[i] as PromiseFulfilledResult<{ results: Product[] }>).value.results;
+          const p = products.find(x => x.best_price != null);
+          if (!p || p.best_price == null) return;
+          items.push({ label: e.label, icon: e.icon, productId: p.id, name: p.name, price: p.best_price, imageUrl: p.image_url });
+        });
+        setBasket(items);
+      } catch {
+        setBasket([]);
+      } finally {
+        setLoadingBasket(false);
+      }
+    }
+
     loadData();
+    loadBasket();
   }, [selectedStore]);
 
   const filterByStore = (raw: typeof deals) =>
@@ -470,6 +514,74 @@ const Home: React.FC = () => {
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {/* Canasta Básica */}
+        {(loadingBasket || basket.length > 0) && (
+          <section className="mt-6 mb-6 px-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Canasta Básica</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  {selectedStore && STORE_META[selectedStore]
+                    ? `Precios de hoy en ${STORE_META[selectedStore].name}`
+                    : 'Mejores precios disponibles'}
+                </p>
+              </div>
+              {!loadingBasket && basket.length > 0 && (
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total estimado</span>
+                  <span className="text-lg font-black text-primary">
+                    {formatCurrency(basket.reduce((s, i) => s + i.price, 0))}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+              {loadingBasket
+                ? [1,2,3,4].map(i => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-slate-700/50 last:border-0 animate-pulse">
+                      <div className="size-10 rounded-lg bg-slate-200 dark:bg-slate-700 shrink-0" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 w-24 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-2.5 w-36 bg-slate-100 dark:bg-slate-700/50 rounded" />
+                      </div>
+                      <div className="h-4 w-14 bg-slate-200 dark:bg-slate-700 rounded" />
+                    </div>
+                  ))
+                : basket.map((item, idx) => (
+                    <div
+                      key={item.productId}
+                      onClick={() => navigate(`/product/${item.productId}`)}
+                      className={`flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-slate-50 dark:active:bg-slate-700/50 transition-colors ${idx < basket.length - 1 ? 'border-b border-slate-100 dark:border-slate-700/50' : ''}`}
+                    >
+                      <div className="size-10 rounded-lg bg-slate-50 dark:bg-slate-900 flex items-center justify-center shrink-0 overflow-hidden">
+                        {item.imageUrl
+                          ? <img src={item.imageUrl} alt={item.name} className="size-9 object-contain" />
+                          : <span className="material-symbols-outlined text-primary text-[20px]">{item.icon}</span>
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{item.label}</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">{item.name}</p>
+                      </div>
+                      <span className="text-base font-black text-primary shrink-0">{formatCurrency(item.price)}</span>
+                    </div>
+                  ))
+              }
+            </div>
+
+            {!loadingBasket && basket.length > 0 && (
+              <button
+                onClick={() => navigate(`/search?store=${selectedStore ?? ''}`)}
+                className="w-full mt-3 py-3 rounded-xl border-2 border-primary/30 text-primary text-sm font-bold flex items-center justify-center gap-2 active:bg-primary/5 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">shopping_cart</span>
+                Planear mi compra completa
+              </button>
+            )}
           </section>
         )}
 
