@@ -345,11 +345,14 @@ def fetch_products_page(session, query, page, store_id=None):
 
     for attempt in range(2):
         try:
+            if attempt == 0:
+                _warm_session(session)
+
             response = session.post(
                 GRAPHQL_ENDPOINT, json=payload, headers=request_headers, timeout=15
             )
 
-            if response.status_code in (412, 429, 403):
+            if response.status_code in (400, 412, 429, 403):
                 print(f"  [ERROR] Lider HTTP {response.status_code} en búsqueda (intento {attempt+1})")
                 if attempt == 0:
                     # Primer reintento: nueva sesión con cookies Playwright si disponible
@@ -383,6 +386,188 @@ def fetch_products_page(session, query, page, store_id=None):
         except Exception as e:
             print(f"  [ERROR] API request failed: {e}")
             return [], None
+
+
+# ---------------------------------------------------------------------------
+# Playwright-based scraper (fallback when PerimeterX blocks curl_cffi)
+# ---------------------------------------------------------------------------
+
+# Control headed/headless via env var. Headless is blocked by PX; headed works.
+_PW_HEADLESS = os.getenv("LIDER_PW_HEADLESS", "0") == "1"
+# Persistent profile path — reusing it builds PX trust over time
+_PW_PROFILE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "lider_browser_profile")
+
+
+def _playwright_search_ssr(query: str, max_pages: int = 1) -> list:
+    """
+    Extract product data from Lider's Next.js SSR __NEXT_DATA__ using a headed
+    Playwright browser with a persistent profile. The persistent profile builds
+    PerimeterX trust over time, making blocks less frequent.
+
+    Returns a list of raw SSR product dicts (different schema from GraphQL itemsV2).
+    """
+    if not _playwright_available():
+        return []
+
+    from playwright.sync_api import sync_playwright
+    import json as _json
+
+    all_items: list = []
+    seen_ids: set = set()
+
+    try:
+        with sync_playwright() as pw:
+            # Use persistent context — cookies and storage survive between runs
+            ctx = pw.chromium.launch_persistent_context(
+                user_data_dir=_PW_PROFILE_DIR,
+                headless=_PW_HEADLESS,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                locale="es-CL",
+                timezone_id="America/Santiago",
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1280, "height": 800},
+            )
+            page = ctx.new_page()
+
+            # Warm session on homepage so PX initializes (skip if profile already warm)
+            page.goto("https://www.lider.cl/supermercado", wait_until="domcontentloaded", timeout=30000)
+            time.sleep(5)
+
+            page_num = 0
+            while page_num < max_pages:
+                page_num += 1
+                # Don't add page param on page 1 — cleaner URL
+                if page_num == 1:
+                    url = f"https://www.lider.cl/supermercado/search?query={query}"
+                else:
+                    url = f"https://www.lider.cl/supermercado/search?query={query}&page={page_num}"
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(6)
+
+                current_url = page.url
+                raw_json = page.evaluate(
+                    "() => { const el = document.getElementById('__NEXT_DATA__'); return el ? el.textContent : null; }"
+                )
+                if not raw_json:
+                    print(f"  [Lider PW] No __NEXT_DATA__ on page {page_num} (URL: {current_url[:80]})")
+                    break
+
+                try:
+                    data = _json.loads(raw_json)
+                except Exception:
+                    print(f"  [Lider PW] JSON parse error on page {page_num}")
+                    break
+
+                search_result = (
+                    data.get("props", {})
+                    .get("pageProps", {})
+                    .get("initialData", {})
+                    .get("searchResult", {})
+                )
+                if not search_result:
+                    print(f"  [Lider PW] No searchResult found, current URL: {page.url[:80]}")
+                    break
+
+                total = search_result.get("aggregatedCount", 0)
+                stacks = search_result.get("itemStacks", [])
+                page_items = [
+                    item
+                    for stack in stacks
+                    for item in (stack.get("items") or [])
+                    if item and item.get("__typename") == "Product"
+                ]
+
+                new_count = 0
+                for item in page_items:
+                    pid = item.get("id") or item.get("usItemId")
+                    if pid in seen_ids:
+                        continue
+                    seen_ids.add(pid)
+                    all_items.append(item)
+                    new_count += 1
+
+                print(f"  [Lider PW] Page {page_num}: {new_count} new products (total: {len(all_items)}, available: {total})")
+
+                if new_count == 0 or len(all_items) >= total:
+                    break
+
+            ctx.close()
+    except Exception as e:
+        print(f"  [Lider PW] Error: {e}")
+
+    return all_items
+
+
+def normalize_product_ssr(raw_product: dict):
+    """
+    Normalize a product from Lider's SSR __NEXT_DATA__ items[] format.
+    This format has price directly on the item (not nested in priceInfo.currentPrice).
+    """
+    name = raw_product.get("name", "")
+    brand = raw_product.get("brand", "")
+    current_price = raw_product.get("price")  # int directly on item
+
+    # priceInfo in SSR has linePrice string, savingsAmt int
+    price_info = raw_product.get("priceInfo") or {}
+    savings_amt = price_info.get("savingsAmt") or 0
+    list_price = current_price + savings_amt if (current_price and savings_amt) else None
+
+    has_discount = savings_amt > 0
+
+    # Availability
+    availability = raw_product.get("availabilityStatusV2") or {}
+    in_stock = availability.get("value") == "IN_STOCK" and not raw_product.get("isOutOfStock", False)
+
+    # Category
+    category_info = raw_product.get("category") or {}
+    category_path_list = category_info.get("path") or []
+    category_parts = [p["name"] for p in category_path_list if p.get("name")]
+    category_path = " > ".join(category_parts)
+    top_category = category_parts[0] if category_parts else ""
+
+    # Image — SSR has both imageInfo.thumbnailUrl and a top-level image field
+    image_url = (raw_product.get("imageInfo") or {}).get("thumbnailUrl") or raw_product.get("image", "")
+
+    # Badge/promo
+    badge = raw_product.get("badge") or {}
+    badge_text = badge.get("text", "")
+    promo_description = badge_text if badge_text else ""
+
+    canonical = raw_product.get("canonicalUrl", "")
+
+    if not name and not current_price:
+        return None
+
+    return normalize_scraped_product({
+        "product_id": raw_product.get("id", ""),
+        "sku_id": raw_product.get("usItemId", ""),
+        "reference": raw_product.get("usItemId", ""),
+        "name": name,
+        "brand": brand,
+        "slug": canonical,
+        "supermarket": "Lider",
+        "price": current_price,
+        "list_price": list_price,
+        "promo_price": None,
+        "promo_description": promo_description,
+        "has_discount": has_discount,
+        "measurement_unit": "",
+        "unit_multiplier": 1,
+        "in_stock": in_stock,
+        "available_quantity": None,
+        "cart_limit": None,
+        "top_category": top_category,
+        "category_path": category_path,
+        "image_url": image_url,
+        "product_url": f"{BASE_URL}{canonical}" if canonical else "",
+        "average_rating": (raw_product.get("rating") or {}).get("averageRating"),
+        "num_reviews": (raw_product.get("rating") or {}).get("numberOfReviews", 0),
+        "seller_name": raw_product.get("sellerName", ""),
+        "scraped_at": datetime.now().isoformat(),
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -518,12 +703,24 @@ def check_health(session=None):
 
 def search_products(session, query, max_pages=1, store_id=None):
     """
-    Search for products on Lider and return normalized results.
-    Uses page-based pagination (40 products per page).
-
-    Args:
-        store_id: Lider branch store ID (injected as x-o-store header).
+    Search for products on Lider.
+    Strategy:
+    1. Try Playwright SSR extraction first (headed browser, bypasses PerimeterX reliably).
+    2. Fall back to curl_cffi GraphQL if Playwright is unavailable.
     """
+    # Primary: Playwright SSR (bypasses PerimeterX)
+    if _playwright_available():
+        ssr_items = _playwright_search_ssr(query, max_pages=max_pages)
+        all_products = []
+        for raw in ssr_items:
+            product = normalize_product_ssr(raw)
+            if product:
+                all_products.append(product)
+        if all_products:
+            return all_products
+        print("  [Lider] Playwright returned 0 products — falling back to curl_cffi...")
+
+    # Fallback: curl_cffi GraphQL
     all_products = []
     seen_ids = set()
 
@@ -560,7 +757,6 @@ def search_products(session, query, max_pages=1, store_id=None):
             print(f"  No new products, stopping.")
             break
 
-        # Stop if we've fetched all available results
         if total_results and page * PAGE_SIZE >= total_results:
             print(f"  All results fetched.")
             break

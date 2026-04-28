@@ -83,3 +83,9 @@ git-replace-secrets.txt
 
 # Bases de datos de test generadas por CI
 backend/test_ci.db*
+
+# Perfil de browser Playwright para Líder (datos locales de PerimeterX)
+backend/data/lider_browser_profile/
+
+# Scripts de investigación temporales
+backend/test_lider_*.py

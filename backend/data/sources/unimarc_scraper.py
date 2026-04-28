@@ -268,7 +268,7 @@ def normalize_product(raw_product):
     # Slug / URL
     slug = item.get("slug", "")
 
-    name = item.get("nameComplete") or item.get("name", "")
+    name = item.get("name") or item.get("nameComplete", "")
     brand = item.get("brand", "")
 
     # AI Fallback trigger
