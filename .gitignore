@@ -77,3 +77,9 @@ backend/data/grocery.db*
 
 # temp
 tmp/
+
+# Archivos de reemplazo de secretos — contienen claves reales, nunca commitear
+git-replace-secrets.txt
+
+# Bases de datos de test generadas por CI
+backend/test_ci.db*

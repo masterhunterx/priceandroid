@@ -15,6 +15,16 @@
       "source": "addyosmani/web-quality-skills",
       "sourceType": "github",
       "computedHash": "680cc12a17e9308b4592a2751db51615c618993f75362cb8e64207f6355a8c63"
+    },
+    "tdd": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "e4453d2f51a009f6b49876cc4d46ce452194c54ea931d4a552a0eb0e9dd24c27"
+    },
+    "triage-issue": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "823d4ab5abd353e28dae31d47bd7aa8f1e75072ebbf9f86576523890f1b8b8d4"
     }
   }
 }
