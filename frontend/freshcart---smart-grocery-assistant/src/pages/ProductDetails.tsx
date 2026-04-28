@@ -25,18 +25,8 @@ function buildStoreSearchUrl(storeSlug: string, productName: string): string {
   }
 }
 
-/** Para VTEX (Jumbo/Santa Isabel): búsqueda con nombre completo — más precisa que 3 palabras */
-function buildVtexFullSearchUrl(storeSlug: string, productName: string): string {
-  const q = encodeURIComponent(productName.trim());
-  const slug = storeSlug.toLowerCase().replace(/[-_]/g, '');
-  switch (slug) {
-    case 'jumbo':       return `https://www.jumbo.cl/buscar?query=${q}`;
-    case 'santaisabel': return `https://www.santaisabel.cl/busqueda?ft=${q}`;
-    default:            return '';
-  }
-}
-
-const VTEX_STORES = new Set(['jumbo', 'santaisabel']);
+// buildVtexFullSearchUrl eliminada: VTEX interpreta nombres completos como slugs de producto
+// y redirige a páginas que pueden estar descontinuadas → 404. Se usa buildStoreSearchUrl para todo.
 
 
 const ProductDetails: React.FC = () => {
@@ -537,8 +527,6 @@ const ProductDetails: React.FC = () => {
                       </div>
                     </div>
                     {pricePoint.in_stock && (() => {
-                        const storeSlugNorm = (pricePoint.store_slug ?? '').toLowerCase().replace(/[-_]/g, '');
-                        const isVtex = VTEX_STORES.has(storeSlugNorm);
                         const directUrl = pricePoint.product_url
                           ? (pricePoint.product_url.startsWith('http') ? pricePoint.product_url : `https://${pricePoint.product_url}`)
                           : null;
@@ -553,17 +541,7 @@ const ProductDetails: React.FC = () => {
                               <span className="material-symbols-outlined text-[13px]">search</span>
                               Buscar en tienda
                             </a>
-                            {isVtex ? (
-                              <a
-                                href={buildVtexFullSearchUrl(storeSlugNorm, product.name)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-1 px-2.5 text-[10px] text-slate-400 font-bold border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 hover:border-primary/30 transition-colors"
-                              >
-                                <span className="material-symbols-outlined text-[13px]">storefront</span>
-                                Ver en tienda
-                              </a>
-                            ) : directUrl ? (
+                            {directUrl && (
                               <a
                                 href={directUrl}
                                 target="_blank"
@@ -573,7 +551,7 @@ const ProductDetails: React.FC = () => {
                                 <span className="material-symbols-outlined text-[13px]">open_in_new</span>
                                 Ver producto
                               </a>
-                            ) : null}
+                            )}
                           </div>
                         );
                       })()}
