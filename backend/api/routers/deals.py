@@ -210,42 +210,55 @@ def list_deals(
     store: Optional[str] = Query(None, description="Filtrar por slug de tienda (jumbo, santa_isabel, lider, unimarc)"),
 ):
     """
-    Motor de Detección de Ofertas: Encuentra los productos con mayores descuentos activos
-    en relación a su precio de lista histórico. Prioriza las ofertas recolectadas recientemente.
-    Soporta paginación mediante el parámetro offset y filtrado por tienda.
+    Motor de Detección de Ofertas: Encuentra los productos con mayores descuentos activos.
+    Usa GROUP BY en SQL para deduplicar (una entrada por store_product) y sortea por
+    discount_percent DESC directamente en BD — sin cargar pools de 500 filas en Python.
     """
     _VALID_STORE_SLUGS = frozenset({'jumbo', 'lider', 'santa_isabel', 'unimarc'})
     if store and store not in _VALID_STORE_SLUGS:
         raise HTTPException(status_code=400, detail="Slug de tienda no válido.")
 
     with get_session() as session:
-        q = (
-            session.query(StoreProduct, Price, Store)
-            .join(Price, Price.store_product_id == StoreProduct.id)
-            .join(Store, Store.id == StoreProduct.store_id)
+        # Subquery: precio más reciente con descuento por store_product (dedup en SQL)
+        latest_disc_sq = (
+            session.query(
+                Price.store_product_id.label("sp_id"),
+                func.max(Price.scraped_at).label("max_at"),
+            )
             .filter(Price.has_discount == True)
+            .group_by(Price.store_product_id)
+            .subquery("ld")
+        )
+
+        base_q = (
+            session.query(StoreProduct, Price, Store)
+            .join(latest_disc_sq, latest_disc_sq.c.sp_id == StoreProduct.id)
+            .join(
+                Price,
+                (Price.store_product_id == StoreProduct.id)
+                & (Price.scraped_at == latest_disc_sq.c.max_at)
+                & (Price.has_discount == True),
+            )
+            .join(Store, Store.id == StoreProduct.store_id)
             .filter(StoreProduct.in_stock == True)
         )
         if store:
-            q = q.filter(Store.slug == store)
-        # Fijamos un pool grande (500) para que la deduplicación y la paginación
-        # funcionen correctamente sin depender del offset del cliente.
-        discounted = q.order_by(Price.scraped_at.desc()).limit(500).all()
+            base_q = base_q.filter(Store.slug == store)
 
-        seen_products = set()
+        rows = (
+            base_q
+            .order_by(Price.discount_percent.desc().nullslast())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
         all_deals = []
-
-        for sp, price, store_obj in discounted:
-            if sp.id in seen_products: continue
-            seen_products.add(sp.id)
-
+        for sp, price, store_obj in rows:
+            # Recalcular desde list_price/price para mayor precisión
             discount_pct = None
-            if price.list_price and price.price and price.list_price > 0:
+            if price.list_price and price.list_price > 0 and price.price is not None:
                 discount_pct = round((1 - price.price / price.list_price) * 100, 1)
-
-            deal_score = 0
-            if discount_pct:
-                deal_score = min(100, int(discount_pct * 1.5))
 
             all_deals.append(DealOut(
                 product_id=sp.product_id if sp.product_id else (1000000 + sp.id),
@@ -257,17 +270,15 @@ def list_deals(
                 store_slug=store_obj.slug,
                 store_logo=store_obj.logo_url or "",
                 price=price.price,
-                current_price=price.price,
                 list_price=price.list_price,
                 promo_price=price.promo_price,
                 promo_description=price.promo_description or "",
                 discount_percent=discount_pct,
-                deal_score=deal_score,
+                deal_score=min(100, int((discount_pct or 0) * 1.5)),
                 product_url=sp.product_url or "",
             ))
 
-        all_deals.sort(key=lambda d: d.discount_percent if d.discount_percent else 0, reverse=True)
-        return UnifiedResponse(data=all_deals[offset: offset + limit])
+        return UnifiedResponse(data=all_deals)
 
 
 @router.get("/deals/historic-lows", response_model=UnifiedResponse)

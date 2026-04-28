@@ -5,10 +5,12 @@ Aplicación FastAPI que expone datos de productos y lógica de ahorro KAIROS al 
 Esta versión modularizada utiliza routers y un sistema de seguridad avanzado (Shield).
 """
 
+import json
 import logging
 import threading
 import time
 import os
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
 
@@ -19,27 +21,64 @@ from fastapi.exceptions import HTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import make_asgi_app
 from starlette.routing import Mount
+from sqlalchemy import text as _sa_text
 
 from core.db import init_db, get_session
 from core.models import Store, StoreProduct
 from .middleware import (
-    get_api_key, 
-    shield_security_middleware, 
+    get_api_key,
+    shield_security_middleware,
 )
 from .exceptions import global_exception_handler, http_exception_handler
 from .routers import products, stores, catalog, deals, pantry, auth, feedback
 from .schemas import UnifiedResponse
 
-# --- CONFIGURACIÓN DE LOGS ---
-# Registramos eventos tanto en consola como en un archivo de depuración permanente.
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        RotatingFileHandler("server_debug.log", maxBytes=5*1024*1024, backupCount=3, encoding="utf-8")
-    ]
-)
+
+class _JsonFormatter(logging.Formatter):
+    """
+    Emite cada línea de log como JSON válido para ser consumido por
+    Grafana Loki, Elastic, o cualquier stack de observabilidad estructurado.
+    En desarrollo se usa el formatter legible estándar (controlado por ENVIRONMENT).
+    """
+    def format(self, record: logging.LogRecord) -> str:
+        log_obj: dict = {
+            "ts":     self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level":  record.levelname,
+            "logger": record.name,
+            "msg":    record.getMessage(),
+            "loc":    f"{record.filename}:{record.lineno}",
+        }
+        if record.exc_info:
+            log_obj["exc"] = self.formatException(record.exc_info)
+        if hasattr(record, "extra"):
+            log_obj.update(record.extra)
+        return json.dumps(log_obj, ensure_ascii=False)
+
+
+def _configure_logging(is_production: bool) -> None:
+    """
+    Configura logging con formato JSON en producción y formato legible en desarrollo.
+    RotatingFileHandler evita que los logs llenen el disco (5MB × 3 archivos).
+    """
+    stream_handler = logging.StreamHandler()
+    file_handler   = RotatingFileHandler(
+        "server_debug.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
+
+    if is_production:
+        fmt = _JsonFormatter()
+    else:
+        fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    for h in (stream_handler, file_handler):
+        h.setFormatter(fmt)
+
+    logging.basicConfig(level=logging.INFO, handlers=[stream_handler, file_handler])
+
+
+_env = os.getenv("ENVIRONMENT", "").lower()
+_is_production = _env != "development"
+_configure_logging(_is_production)
 logger = logging.getLogger("FreshCartAPI")
 
 # --- AGENTES EN SEGUNDO PLANO ---
@@ -190,10 +229,7 @@ async def lifespan(app: FastAPI):
         bot_task.cancel()
 
 # --- INICIALIZACIÓN DE LA APP ---
-# Fail-closed: si ENVIRONMENT no está explícitamente en "development", se trata como producción.
-# Esto evita exponer /docs en un deploy donde se olvidó configurar la variable.
-_env = os.getenv("ENVIRONMENT", "").lower()
-_is_production = _env != "development"
+# _env y _is_production ya fueron definidos en _configure_logging arriba.
 
 app = FastAPI(
     title="Antigravity Grocery API",
@@ -354,6 +390,29 @@ async def honeytoken_common_scans(request: Request):
 async def root():
     """Estado base de la API (Público)."""
     return {"status": "online"}
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check activo: verifica conectividad con la BD emitiendo SELECT 1.
+    Retorna 200 si todo está bien, 503 si la BD no responde.
+    Diseñado para ser consumido por Railway, Render, Docker HEALTHCHECK y Grafana.
+    """
+    try:
+        with get_session() as db:
+            db.execute(_sa_text("SELECT 1"))
+        return {
+            "status": "healthy",
+            "db": "ok",
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        logger.error("[Health] DB check falló: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "db": "error"},
+        )
 
 if __name__ == "__main__":
     import uvicorn

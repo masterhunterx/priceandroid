@@ -178,14 +178,27 @@ def _apply_migrations(engine):
                 conn.rollback()
                 _mig_log.error(f"[Migration] Falló {table}.{column}: {_e}")
 
-    # Índices de rendimiento — idempotentes via IF NOT EXISTS (Postgres y SQLite 3.3+)
+    # Índices de rendimiento — idempotentes via IF NOT EXISTS (Postgres y SQLite 3.3+).
+    # Los índices compuestos están ordenados por selectividad descendiente (columna más
+    # selectiva primero) para maximizar el beneficio en planes de ejecución.
     index_migrations = [
-        ("idx_sp_store_id",       "store_products", "store_id"),
-        ("idx_sp_in_stock",       "store_products", "in_stock"),
-        ("idx_sp_last_sync",      "store_products", "last_sync"),
-        ("idx_sp_stock_sync",     "store_products", "in_stock, last_sync"),
-        ("idx_price_sp_id",       "prices",         "store_product_id"),
-        ("idx_price_has_discount","prices",         "has_discount"),
+        # Búsquedas de store_products
+        ("idx_sp_store_id",        "store_products", "store_id"),
+        ("idx_sp_in_stock",        "store_products", "in_stock"),
+        ("idx_sp_last_sync",       "store_products", "last_sync"),
+        ("idx_sp_stock_sync",      "store_products", "in_stock, last_sync"),
+        # Precios — columnas simples
+        ("idx_price_sp_id",        "prices", "store_product_id"),
+        ("idx_price_has_discount", "prices", "has_discount"),
+        # Índices compuestos críticos para preload_latest_prices y list_deals:
+        # (store_product_id, scraped_at DESC) → MAX(scraped_at) GROUP BY sp_id en O(log n)
+        ("idx_price_sp_scraped",   "prices", "store_product_id, scraped_at DESC"),
+        # (has_discount, scraped_at DESC) → filtro de descuentos + orden en list_deals
+        ("idx_price_disc_scraped", "prices", "has_discount, scraped_at DESC"),
+        # Favoritos por usuario — elimina full-scan en fav_rows de search_products
+        ("idx_up_user_product",    "user_preferences", "user_id, product_id"),
+        # Notificaciones por usuario — evita scan completo al leer notificaciones
+        ("idx_notif_user_read",    "notifications", "user_id, is_read"),
     ]
     for idx_name, table, column in index_migrations:
         with engine.connect() as conn:

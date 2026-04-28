@@ -42,7 +42,8 @@ export interface PriceInsight {
 }
 
 export interface Product {
-  id: string | number;
+  // M2: el backend siempre retorna int — string | number causaba comparaciones con === que fallaban
+  id: number;
   name: string;
   brand: string;
   category: string;
@@ -95,12 +96,13 @@ export interface Branch {
   store_name: string;
   name: string;
   city: string;
-  region: string;
-  address?: string;
+  // H4: backend BranchOut tiene region: Optional[str] = None — puede llegar null
+  region?: string | null;
+  address?: string | null;
   external_store_id: string;
-  latitude?: number;
-  longitude?: number;
-  distance_km?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  distance_km?: number | null;
 }
 
 export interface Deal {
@@ -117,6 +119,8 @@ export interface Deal {
   promo_price: number | null;
   promo_description: string;
   discount_percent: number | null;
+  // M1: deal_score existe en DealOut del backend pero faltaba en el tipo frontend
+  deal_score: number;
   product_url: string;
   // Compatibility for older mocks
   productId?: string | number;

@@ -24,6 +24,17 @@ from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel
 from ..schemas import UnifiedResponse
 
+# H1 — Pre-computar hash dummy para normalizar timing en usuarios inexistentes.
+# bcrypt checkpw tarda ~80-150ms; sin esto, usuarios inexistentes responden en <1ms
+# lo que permite enumeración de usernames por timing side-channel.
+try:
+    import bcrypt as _bcrypt
+    _DUMMY_HASH: bytes = _bcrypt.hashpw(b"freshcart_dummy_timing_normalizer", _bcrypt.gensalt(rounds=12))
+    _BCRYPT_AVAILABLE = True
+except ImportError:
+    _DUMMY_HASH = b""
+    _BCRYPT_AVAILABLE = False
+
 def _check_password(plain: str, stored: str) -> bool:
     """Compara contraseña. Si stored empieza con $2b/$2a/$2y usa bcrypt, si no texto plano."""
     if stored.startswith(("$2b$", "$2a$", "$2y$")):
@@ -42,18 +53,35 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 _RL_WINDOW = 60
 _RL_MAX_ATTEMPTS = 5
 _RL_MAX_IPS = 10_000
+_RL_CLEANUP_THRESHOLD = int(_RL_MAX_IPS * 0.90)  # limpiar al 90% de capacidad
 
 _login_attempts: dict = defaultdict(list)
 _rl_lock = Lock()
 
+
+def _cleanup_stale_ips_unsafe() -> None:
+    """Elimina IPs sin actividad reciente. DEBE llamarse con _rl_lock ya adquirido."""
+    now = time.time()
+    stale = [ip for ip, ts_list in _login_attempts.items()
+             if not any(now - t < _RL_WINDOW for t in ts_list)]
+    for ip in stale:
+        del _login_attempts[ip]
+
+
 def _check_rate_limit(ip: str) -> bool:
     now = time.time()
     with _rl_lock:
+        # H3 — Cleanup oportunístico al acercarse al límite de capacidad.
+        # Sin esto, 10K IPs únicas bloquean indefinidamente a nuevas IPs legítimas.
+        if len(_login_attempts) >= _RL_CLEANUP_THRESHOLD:
+            _cleanup_stale_ips_unsafe()
+
         if ip not in _login_attempts and len(_login_attempts) >= _RL_MAX_IPS:
             return False
+
         recent = [t for t in _login_attempts[ip] if now - t < _RL_WINDOW]
         if not recent:
-            del _login_attempts[ip]
+            _login_attempts.pop(ip, None)
             _login_attempts[ip].append(now)
             return True
         if len(recent) >= _RL_MAX_ATTEMPTS:
@@ -105,22 +133,48 @@ if not ADMIN_APPROVE_KEY:
 # {username: {"approved": bool, "requested_at": float, "ip": str, "token": str}}
 _pending_approvals: dict = {}
 _approvals_lock = Lock()
+# M5 — TTL para solicitudes de aprobación: 1 hora.
+# Sin TTL las entradas se acumulan indefinidamente en memoria.
+_APPROVAL_TTL_SECONDS = 3600
 
-# JWT revocation — set de (sub, iat) revocados en logout.
-# No persiste entre reinicios (tokens expiran solos en 8h, riesgo aceptable).
-_revoked_tokens: set = set()
+
+def _get_approval_if_valid(username: str) -> dict | None:
+    """Retorna la aprobación pendiente solo si no expiró. Elimina si venció."""
+    now = time.time()
+    approval = _pending_approvals.get(username)
+    if approval and (now - approval["requested_at"]) > _APPROVAL_TTL_SECONDS:
+        del _pending_approvals[username]
+        return None
+    return approval
+
+# H2 — JWT revocation usando dict {(sub, iat): exp_unix_float} en lugar de set.
+# El set original crecía sin límite: nunca se limpiaba aunque los tokens expiraran.
+# Con el dict, cada entrada lleva su propio timestamp de expiración y se limpia
+# oportunísticamente en cada consulta de _is_token_revoked.
+_revoked_tokens: dict[tuple, float] = {}
 _revoked_lock = Lock()
+
 
 def _revoke_token(payload: dict) -> None:
     sub = payload.get("sub", "")
     iat = payload.get("iat", 0)
+    exp = payload.get("exp", time.time() + ACCESS_EXP * 3600)
+    # PyJWT puede decodificar 'exp' como int o datetime según versión
+    if hasattr(exp, "timestamp"):
+        exp = exp.timestamp()
     with _revoked_lock:
-        _revoked_tokens.add((sub, iat))
+        _revoked_tokens[(sub, iat)] = float(exp)
+
 
 def _is_token_revoked(payload: dict) -> bool:
     sub = payload.get("sub", "")
     iat = payload.get("iat", 0)
+    now = time.time()
     with _revoked_lock:
+        # Cleanup oportunístico: eliminar entradas cuyo token ya expiró por tiempo
+        expired = [k for k, exp in _revoked_tokens.items() if exp < now]
+        for k in expired:
+            del _revoked_tokens[k]
         return (sub, iat) in _revoked_tokens
 
 # Usuarios aprobados al menos una vez — no requieren re-aprobación hasta restart
@@ -249,9 +303,14 @@ def login(body: LoginRequest, request: Request):
 
     username = body.username.strip().lower()
 
-    # 1. Whitelist + credenciales — mensaje idéntico para evitar enumeración de usuarios
+    # 1. Whitelist + credenciales — mensaje idéntico para evitar enumeración de usuarios.
+    # H1 — Timing normalization: para usuarios inexistentes ejecutamos un dummy bcrypt
+    # (sin esto, la ausencia del hash tarda <1ms vs ~100ms con bcrypt, permitiendo
+    # distinguir "usuario no existe" de "contraseña incorrecta" por latencia).
     stored_pw = ALLOWED_USERS.get(username, "")
-    user_exists = username in ALLOWED_USERS
+    user_exists = bool(stored_pw)
+    if not user_exists and _BCRYPT_AVAILABLE:
+        _bcrypt.checkpw(body.password.encode(), _DUMMY_HASH)  # normaliza latencia
     credentials_ok = user_exists and _check_password(body.password, stored_pw)
 
     if not user_exists:
@@ -286,7 +345,7 @@ def login(body: LoginRequest, request: Request):
         return JSONResponse(content={"success": True, "data": _issue_tokens(username)})
 
     with _approvals_lock:
-        approval = _pending_approvals.get(username)
+        approval = _get_approval_if_valid(username)
 
         if approval is None:
             # Token único por solicitud — no expone el ADMIN_APPROVE_KEY permanente
@@ -330,7 +389,7 @@ def approve_user(username: str, token: str = ""):
     """Admin aprueba un usuario pendiente. Usa token único por solicitud (enviado a Discord)."""
     username = username.strip().lower()
     with _approvals_lock:
-        pending = _pending_approvals.get(username)
+        pending = _get_approval_if_valid(username)
         if not pending:
             raise HTTPException(status_code=404, detail=f"No hay solicitud pendiente para '{username}'.")
         # Acepta el token único de la solicitud O el ADMIN_APPROVE_KEY como fallback de emergencia
@@ -352,7 +411,7 @@ def approval_status(username: str):
     """Frontend polling: ¿fue aprobado ya el usuario?"""
     username = username.strip().lower()
     with _approvals_lock:
-        approval = _pending_approvals.get(username)
+        approval = _get_approval_if_valid(username)
     if approval is None:
         return {"approved": False, "pending": False}
     return {"approved": approval["approved"], "pending": not approval["approved"]}

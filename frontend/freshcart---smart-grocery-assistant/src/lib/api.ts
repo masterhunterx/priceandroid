@@ -192,10 +192,12 @@ export async function toggleFavorite(productId: number | string): Promise<{ is_f
 // ── Planificación y optimización ───────────────────────────────────────────────
 
 export async function runUltraplan(productIds: number[]): Promise<PlanningResult> {
+  // C3: el backend usa Body(..., embed=True) → espera {"product_ids": [...]}
+  // El formato anterior (array bare) causaba 422 Unprocessable Entity.
   const resp = await fetchWithAuth(`${API_BASE_URL}/optimize/ultraplan`, {
     method: 'POST',
     headers: getHeaders(),
-    body: JSON.stringify(productIds),
+    body: JSON.stringify({ product_ids: productIds }),
   });
   const json = await resp.json();
   if (!json.success) throw new Error(json.error || 'Failed to run Ultraplan');
@@ -336,8 +338,8 @@ const _clpFormatter = new Intl.NumberFormat('es-CL', {
   minimumFractionDigits: 0,
 });
 
-export function formatCurrency(amount: number | null): string {
-  if (amount === null) return 'N/A';
+export function formatCurrency(amount: number | null | undefined): string {
+  if (amount == null) return 'N/A';
   return _clpFormatter.format(amount);
 }
 

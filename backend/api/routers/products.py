@@ -201,7 +201,9 @@ def search_products(
     if category and len(category) > 100:
         raise HTTPException(status_code=400, detail="El filtro de categoría es demasiado largo.")
 
-    cache_key = f"{q}|{store}|{category}|{sort}|{page}|{page_size}"
+    # current_user es parte de la key: sin esto, los is_favorite de un usuario
+    # se filtrarían a otros usuarios que hagan la misma búsqueda.
+    cache_key = f"{current_user}|{q}|{store}|{category}|{sort}|{page}|{page_size}"
     cached = _get_cached(cache_key)
     if cached is not None:
         return cached

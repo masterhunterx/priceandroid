@@ -11,6 +11,7 @@ import Favorites from './pages/Favorites';
 import Notifications from './pages/Notifications';
 import BottomNav from './components/BottomNav';
 import ProtectedRoute from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from 'react-hot-toast';
 import { LocationProvider } from './context/LocationContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -70,45 +71,62 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             } />
 
-            {/* Rutas protegidas */}
+            {/* Rutas protegidas — cada una envuelta en ErrorBoundary independiente
+                para que un crash en ProductDetails no mate Home, SearchResults, etc. */}
             <Route path="/" element={
               <ProtectedRoute>
-                <PageTransition><Home /></PageTransition>
+                <ErrorBoundary section="Home">
+                  <PageTransition><Home /></PageTransition>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/search" element={
               <ProtectedRoute>
-                <PageTransition><SearchResults /></PageTransition>
+                <ErrorBoundary section="SearchResults">
+                  <PageTransition><SearchResults /></PageTransition>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/product/:id" element={
               <ProtectedRoute>
-                <PageTransition><ProductDetails /></PageTransition>
+                <ErrorBoundary section="ProductDetails">
+                  <PageTransition><ProductDetails /></PageTransition>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/products/:id" element={
               <ProtectedRoute>
-                <PageTransition><ProductDetails /></PageTransition>
+                <ErrorBoundary section="ProductDetails">
+                  <PageTransition><ProductDetails /></PageTransition>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/categories" element={
               <ProtectedRoute>
-                <PageTransition><Categories /></PageTransition>
+                <ErrorBoundary section="Categories">
+                  <PageTransition><Categories /></PageTransition>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/favorites" element={
               <ProtectedRoute>
-                <PageTransition><Favorites /></PageTransition>
+                <ErrorBoundary section="Favorites">
+                  <PageTransition><Favorites /></PageTransition>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/notifications" element={
               <ProtectedRoute>
-                <PageTransition><Notifications /></PageTransition>
+                <ErrorBoundary section="Notifications">
+                  <PageTransition><Notifications /></PageTransition>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
             <Route path="/cart" element={
               <ProtectedRoute>
-                <PageTransition><Cart /></PageTransition>
+                <ErrorBoundary section="Cart">
+                  <PageTransition><Cart /></PageTransition>
+                </ErrorBoundary>
               </ProtectedRoute>
             } />
           </Routes>
@@ -125,15 +143,19 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <CartProvider>
-          <LocationProvider>
-            <AppContent />
-          </LocationProvider>
-        </CartProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    // ErrorBoundary raíz: captura fallos en providers o en AppContent completo.
+    // Los ErrorBoundary por ruta (dentro de AppContent) son más granulares.
+    <ErrorBoundary section="AppRoot">
+      <ThemeProvider>
+        <AuthProvider>
+          <CartProvider>
+            <LocationProvider>
+              <AppContent />
+            </LocationProvider>
+          </CartProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 };
 
