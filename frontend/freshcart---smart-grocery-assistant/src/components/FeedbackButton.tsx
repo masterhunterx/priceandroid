@@ -95,14 +95,17 @@ export default function FeedbackButton() {
   // Don't show on auth pages
   if (['/login', '/register'].includes(location.pathname)) return null;
 
+  const isCart = location.pathname === '/cart';
+  const btnBottom = isCart ? '152px' : '88px';
+
   return (
     <>
       {/* Tester mode pulse ring */}
       {isTesterMode && (
         <div style={{
           position: 'fixed',
-          bottom: isTesterMode ? '71px' : '80px',
-          left: '7px',
+          bottom: `calc(${btnBottom} - 9px)`,
+          right: '7px',
           width: '62px',
           height: '62px',
           borderRadius: '50%',
@@ -114,7 +117,7 @@ export default function FeedbackButton() {
       )}
 
       {/* Floating trigger button */}
-      <div style={{ position: 'fixed', bottom: '80px', left: '16px', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+      <div style={{ position: 'fixed', bottom: btnBottom, right: '16px', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
         {isTesterMode && (
           <span style={{
             background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
