@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications, searchProducts, readPriceSnapshots, writePriceSnapshots, PriceSnapshotMap } from '../lib/api';
 import { Deal, Category, Notification, Branch, Product, HistoricLow } from '../types';
@@ -70,6 +70,11 @@ const Home: React.FC = () => {
   const [searchingDeals, setSearchingDeals] = useState(true);
   const [dealsOffset, setDealsOffset] = useState(0);
   const [refreshingDeals, setRefreshingDeals] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [pullY, setPullY] = useState(0);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const PULL_THRESHOLD = 70;
   const DEALS_PAGE_SIZE = 10;
 
   // Logic to get a friendly location name
@@ -229,7 +234,7 @@ const Home: React.FC = () => {
     });
 
     return () => { cancelled = true; };
-  }, [selectedStore]);
+  }, [selectedStore, refreshKey]);
 
   const filterByStore = (raw: typeof deals) =>
     selectedStore ? raw.filter(d => d.store_slug === selectedStore) : raw;
@@ -261,6 +266,24 @@ const Home: React.FC = () => {
     }
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY === 0) touchStartY.current = e.touches[0].clientY;
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (window.scrollY > 0 || pullRefreshing) return;
+    const delta = e.touches[0].clientY - touchStartY.current;
+    if (delta > 0) setPullY(Math.min(delta * 0.4, PULL_THRESHOLD));
+  };
+  const handleTouchEnd = async () => {
+    if (pullY >= PULL_THRESHOLD && !pullRefreshing) {
+      setPullRefreshing(true);
+      setRefreshKey(k => k + 1);
+      await new Promise(r => setTimeout(r, 800));
+      setPullRefreshing(false);
+    }
+    setPullY(0);
+  };
+
   const getCategoryIcon = (name: string) => {
     const n = name.toLowerCase();
     if (n.includes('leche') || n.includes('lacteos')) return 'local_drink';
@@ -273,7 +296,20 @@ const Home: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col">
+    <div
+      className="flex flex-col"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ transform: pullY > 0 ? `translateY(${pullY}px)` : undefined, transition: pullY === 0 ? 'transform 0.3s ease' : undefined }}
+    >
+      {pullY > 0 && (
+        <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none" style={{ transform: `translateY(${pullY - 40}px)` }}>
+          <div className={`size-9 rounded-full bg-primary flex items-center justify-center shadow-lg transition-transform ${pullY >= PULL_THRESHOLD ? 'scale-110' : 'scale-90'}`}>
+            <span className={`material-symbols-outlined text-background-dark text-lg ${pullRefreshing ? 'animate-spin' : ''}`}>refresh</span>
+          </div>
+        </div>
+      )}
       <LocationSelector isOpen={isLocationOpen} onClose={() => setIsLocationOpen(false)} />
       
       <HomeHeader
