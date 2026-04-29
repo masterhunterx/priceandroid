@@ -231,7 +231,7 @@ async def lifespan(app: FastAPI):
 
     # --- SCHEDULER DE INGESTA AUTOMÁTICA ---
     ingest_enabled = os.getenv("INGEST_SCHEDULER", "true").lower() == "true"
-    if ingest_enabled:
+    if ingest_enabled and not _scheduler.running:
         _scheduler.start()
         logger.info("[SCHEDULER] Ingesta automática cada 8h activada")
 
