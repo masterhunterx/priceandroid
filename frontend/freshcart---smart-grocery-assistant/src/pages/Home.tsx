@@ -25,11 +25,11 @@ interface PriceDropItem {
 }
 import { useAuth } from '../context/AuthContext';
 import HomeHeader from '../components/HomeHeader';
-
 import StoreLogo from '../components/StoreLogo';
 import { useLocation } from '../context/LocationContext';
 import { useTheme } from '../context/ThemeContext';
 import LocationSelector from '../components/LocationSelector';
+import { useCart } from '../context/CartContext';
 
 const STORE_META: Record<string, { name: string; color: string }> = {
   jumbo:        { name: 'Jumbo',        color: '#00a650' },
@@ -56,6 +56,7 @@ const Home: React.FC = () => {
   const { coords, selectedBranches, selectedStore, setSelectedStore } = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { username: authUsername } = useAuth();
+  const { addItem, isInCart } = useCart();
   const username = authUsername || 'Usuario';
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [priceDrops, setPriceDrops] = useState<PriceDropItem[]>([]);
@@ -295,9 +296,17 @@ const Home: React.FC = () => {
     return 'shopping_basket';
   };
 
+  const heroItem = deals[0] ?? null;
+  const storeName = selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : null;
+  const totalBasket = basket.reduce((s, i) => s + i.price, 0);
+  const allAlerts = [
+    ...priceDrops.map(d => ({ type: 'drop' as const, id: d.productId, name: d.name, imageUrl: d.imageUrl, price: d.currentPrice, oldPrice: d.previousPrice, pct: d.dropPercent, storeSlug: d.storeSlug, storeName: d.storeName })),
+    ...(selectedStore ? historicLows.filter(h => h.store_slug === selectedStore) : historicLows).map(h => ({ type: 'low' as const, id: h.product_id, name: h.product_name, imageUrl: h.image_url ?? '', price: h.min_price_all_time, oldPrice: null, pct: null, storeSlug: h.store_slug ?? '', storeName: h.store_name })),
+  ];
+
   return (
     <div
-      className="flex flex-col"
+      className="flex flex-col pb-24"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -310,293 +319,111 @@ const Home: React.FC = () => {
           </div>
         </div>
       )}
+
       <LocationSelector isOpen={isLocationOpen} onClose={() => setIsLocationOpen(false)} />
-      
-      <HomeHeader
-        username={username}
-        selectedStore={selectedStore}
-        theme={theme}
-        notifications={notifications}
-        toggleTheme={toggleTheme}
-        onOpenLocation={() => setIsLocationOpen(true)}
-      />
+      <HomeHeader username={username} selectedStore={selectedStore} theme={theme} notifications={notifications} toggleTheme={toggleTheme} onOpenLocation={() => setIsLocationOpen(true)} />
 
-      {/* Main Content */}
-      <main>
-        {/* Categories */}
-        <section>
-          <div data-tour="categories" className="flex items-center justify-between px-4 pt-4 pb-2">
-            <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Categorías</h3>
-            <button 
-              onClick={() => navigate('/categories')}
-              className="text-primary text-sm font-semibold"
-            >
-              Ver todas
-            </button>
-          </div>
-          <div className="flex gap-3 px-4 py-3 overflow-x-auto no-scrollbar">
-            {categories.map((cat, idx) => (
-              <div
-                key={cat.name}
-                onClick={() => navigate(`/search?category=${encodeURIComponent(CATEGORY_SEARCH_OVERRIDES[cat.name] ?? cat.name)}${selectedStore ? `&store=${selectedStore}` : ''}`)}
-                className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-xl px-4 border cursor-pointer border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800`}
-              >
-                <span className="material-symbols-outlined text-[20px] text-primary">
-                  {getCategoryIcon(cat.name)}
-                </span>
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  {cat.name}
-                </p>
-                <span className="text-[10px] text-slate-400">({cat.product_count})</span>
-              </div>
-            ))}
-            {loading && [1,2,3].map(i => (
-               <div key={i} className="flex h-10 w-24 shrink-0 animate-pulse bg-slate-200 dark:bg-slate-700 rounded-xl"></div>
-            ))}
-          </div>
-        </section>
+      <main className="space-y-6 pb-4">
 
-        {/* Deals */}
-        <section className="mt-4">
-          <div className="flex items-center justify-between px-4 pb-4">
-            <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">
-              {!searchingDeals && deals.length === 0 && essentialProducts.length > 0
-                ? `Productos en ${selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : 'la tienda'}`
-                : selectedStore && STORE_META[selectedStore]
-                  ? `Ofertas en ${STORE_META[selectedStore].name}`
-                  : 'Mejores Ofertas de Hoy'}
-            </h3>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 text-primary text-sm font-semibold">
-                <span className="material-symbols-outlined text-sm">bolt</span>
-                Ofertas Flash
+        {/* ── HERO KAIROS ─────────────────────────────────────────────────── */}
+        {!loading && heroItem && (
+          <div
+            onClick={() => navigate(`/product/${heroItem.product_id}`)}
+            className="mx-4 mt-4 rounded-2xl overflow-hidden cursor-pointer active:scale-[0.98] transition-transform relative"
+            style={{ background: 'linear-gradient(135deg, #0d2818 0%, #0d1117 60%, #1a2e22 100%)' }}
+          >
+            <div className="absolute inset-0 opacity-10">
+              <div className="absolute top-0 right-0 size-48 bg-primary rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+            </div>
+            <div className="relative flex items-center gap-4 p-4">
+              <div className="size-24 shrink-0 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden border border-white/10">
+                <img src={heroItem.image_url} alt={heroItem.product_name} className="size-20 object-contain" />
               </div>
-              <button
-                onClick={handleRefreshDeals}
-                disabled={refreshingDeals || searchingDeals}
-                className="flex items-center justify-center size-8 rounded-full bg-primary/10 text-primary border border-primary/20 active:scale-90 transition-all disabled:opacity-40"
-                title="Ver más ofertas"
-              >
-                <span className={`material-symbols-outlined text-[18px] ${refreshingDeals ? 'animate-spin' : ''}`}>
-                  refresh
-                </span>
-              </button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="material-symbols-outlined text-primary text-[14px]">psychology</span>
+                  <span className="text-primary text-[10px] font-black uppercase tracking-widest">Mejor deal hoy</span>
+                </div>
+                <h3 className="text-white font-bold text-sm leading-tight line-clamp-2 mb-2">{heroItem.product_name}</h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-primary text-2xl font-black">{formatCurrency(heroItem.price)}</span>
+                  {heroItem.list_price && (
+                    <span className="text-white/40 text-sm line-through">{formatCurrency(heroItem.list_price)}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <StoreLogo slug={heroItem.store_slug} name={heroItem.store_name} className="size-4" />
+                  <span className="text-white/60 text-[11px]">{heroItem.store_name}</span>
+                  {heroItem.discount_percent && (
+                    <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      -{Math.round(heroItem.discount_percent)}%
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar pb-4">
-            {searchingDeals ? (
-              <div className="flex flex-col items-center justify-center w-full py-12 px-8 bg-slate-50 dark:bg-[#1a2e22]/30 rounded-3xl border-2 border-dashed border-slate-200 dark:border-primary/20 animate-in fade-in zoom-in duration-500">
-                <div className="relative">
-                  <span className="material-symbols-outlined text-primary text-[48px] animate-spin-slow">cyclone</span>
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
-                  </span>
-                </div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-4 text-center">Buscando las mejores ofertas diarias...</h4>
-                <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-widest font-black flex items-center gap-1">
-                  BUSCANDO OFERTAS
-                </p>
-                <div className="mt-6 flex gap-1.5">
-                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"></div>
-                </div>
-              </div>
-            ) : (deals.length > 0 || essentialProducts.length > 0) ? (
-              <>
-                {deals.map((deal) => (
-                  <div
-                    key={`${deal.product_id}-${deal.store_slug}`}
-                    onClick={() => navigate(`/product/${deal.product_id}`)}
-                    className="flex-none w-48 bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
-                  >
-                    <div className="relative h-32 w-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-                      {deal.discount_percent && (
-                        <div className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                          -{Math.round(deal.discount_percent)}%
-                        </div>
-                      )}
-                      <div className="absolute top-2 right-2 z-10 size-6 overflow-hidden">
-                        <StoreLogo slug={deal.store_slug} name={deal.store_name} className="size-full shadow-sm" />
-                      </div>
-                      <img src={deal.image_url} alt={deal.product_name} className="size-full object-contain p-4 group-hover:scale-110 transition-transform" />
-                    </div>
-                    <div className="p-3">
-                      <h4 className="text-slate-900 dark:text-white text-sm font-bold truncate">{deal.product_name}</h4>
-                      <p className="text-slate-500 text-[10px] mt-1">{deal.store_name} • {deal.brand}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-primary text-lg font-bold">{formatCurrency(deal.price)}</span>
-                        {deal.list_price && (
-                          <span className="text-slate-400 text-xs line-through">{formatCurrency(deal.list_price)}</span>
-                        )}
-                      </div>
-                      <button className="w-full mt-3 bg-primary hover:bg-primary/90 text-background-dark text-xs font-bold py-2 rounded-lg transition-colors">
-                        Ver Comparación
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {essentialProducts.map((product) => {
-                  const storePrice = product.prices?.find(p => p.store_slug === selectedStore);
-                  const price = storePrice?.price ?? product.best_price;
-                  const listPrice = storePrice?.list_price;
-                  return (
-                    <div
-                      key={`ess-${product.id}`}
-                      onClick={() => navigate(`/product/${product.id}`)}
-                      className="flex-none w-44 bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
-                    >
-                      <div className="relative h-28 w-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-                        <img
-                          src={product.image_url || ''}
-                          alt={product.name}
-                          className="size-full object-contain p-3 group-hover:scale-110 transition-transform"
-                        />
-                      </div>
-                      <div className="p-3">
-                        <h4 className="text-slate-900 dark:text-white text-xs font-bold leading-tight line-clamp-2 mb-1">{product.name}</h4>
-                        {product.brand && <p className="text-slate-400 text-[10px] truncate">{product.brand}</p>}
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <span style={{ color: 'var(--store-primary)' }} className="text-base font-bold">
-                            {price !== null ? formatCurrency(price) : '—'}
-                          </span>
-                          {listPrice && listPrice > (price ?? 0) && (
-                            <span className="text-slate-400 text-[10px] line-through">{formatCurrency(listPrice)}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
-            ) : (
-              <div className="text-center py-8 w-full">
-                <span className="material-symbols-outlined text-slate-300 text-[40px]">local_offer</span>
-                <p className="text-slate-500 text-sm mt-2">Sin ofertas registradas hoy.</p>
+        )}
+        {loading && (
+          <div className="mx-4 mt-4 h-32 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
+        )}
+
+        {/* ── BUSCADOR CENTRAL ────────────────────────────────────────────── */}
+        <div className="px-4">
+          <button
+            onClick={() => navigate('/search')}
+            className="w-full flex items-center gap-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 shadow-sm active:scale-[0.98] transition-transform"
+          >
+            <span className="material-symbols-outlined text-primary text-[24px]">search</span>
+            <span className="text-slate-400 text-base font-medium flex-1 text-left">
+              {storeName ? `Buscar en ${storeName}...` : 'Buscar productos...'}
+            </span>
+            <span className="material-symbols-outlined text-slate-300 text-[18px]">tune</span>
+          </button>
+        </div>
+
+        {/* ── CATEGORÍAS (scroll horizontal compacto) ─────────────────────── */}
+        <div className="px-4">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            {loading
+              ? [1,2,3,4].map(i => <div key={i} className="flex h-8 w-20 shrink-0 animate-pulse bg-slate-200 dark:bg-slate-700 rounded-full" />)
+              : categories.slice(0, 8).map(cat => (
                 <button
-                  onClick={() => navigate(`/search?store=${selectedStore ?? ''}`)}
-                  className="mt-3 text-xs font-bold underline underline-offset-2"
-                  style={{ color: 'var(--store-primary)' }}
+                  key={cat.name}
+                  onClick={() => navigate(`/search?category=${encodeURIComponent(CATEGORY_SEARCH_OVERRIDES[cat.name] ?? cat.name)}${selectedStore ? `&store=${selectedStore}` : ''}`)}
+                  className="flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 active:bg-primary/10 transition-colors"
                 >
-                  Ver todos los productos →
+                  <span className="material-symbols-outlined text-[14px] text-primary">{getCategoryIcon(cat.name)}</span>
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">{cat.name}</span>
                 </button>
-              </div>
+              ))
+            }
+            {!loading && categories.length > 8 && (
+              <button
+                onClick={() => navigate('/categories')}
+                className="flex h-8 shrink-0 items-center gap-1 rounded-full px-3 border border-primary/30 bg-primary/5 text-primary"
+              >
+                <span className="text-xs font-bold">Ver más</span>
+                <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+              </button>
             )}
           </div>
-        </section>
+        </div>
 
-        {/* Título de sección cuando muestra productos esenciales en vez de ofertas */}
-        {!searchingDeals && deals.length === 0 && essentialProducts.length > 0 && (
-          <p className="px-4 -mt-2 mb-2 text-xs text-slate-400 italic">
-            Sin ofertas registradas hoy — mostrando productos disponibles en {selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : 'la tienda'}.
-          </p>
-        )}
-
-        {/* Historic Lows — filtrados por tienda activa */}
-        {(() => {
-          const visibleLows = selectedStore
-            ? historicLows.filter(h => h.store_slug === selectedStore)
-            : historicLows;
-          if (visibleLows.length === 0) return null;
-          return (
-          <section className="mt-6">
-            <div className="flex items-center justify-between px-4 pb-4">
-              <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Mínimos Históricos</h3>
-              <div className="flex items-center gap-1 text-primary text-sm font-semibold">
-                <span className="material-symbols-outlined text-sm">trending_down</span>
-                Precios mínimos
-              </div>
-            </div>
-            <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar pb-4">
-              {visibleLows.map((deal) => (
-                <div
-                  key={`historic-${deal.product_id}`}
-                  onClick={() => navigate(`/product/${deal.product_id}`)}
-                  className="flex-none w-64 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl overflow-hidden border border-emerald-200 dark:border-emerald-800/30 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group flex items-center p-3 gap-3"
-                >
-                  <div className="relative size-16 bg-white dark:bg-slate-900 rounded-lg flex items-center justify-center shrink-0 border border-emerald-100 dark:border-emerald-800/50">
-                    <img src={deal.image_url} alt={deal.product_name} className="size-12 object-contain group-hover:scale-110 transition-transform" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h4 className="text-slate-900 dark:text-white text-xs font-bold truncate leading-tight mb-1">{deal.product_name}</h4>
-                    <p className="text-emerald-600 dark:text-emerald-400 text-xs font-black">{formatCurrency(deal.min_price_all_time)}</p>
-                    <p className="text-slate-400 text-[9px] mt-0.5 truncate flex items-center gap-1">
-                       <span className="material-symbols-outlined text-[10px]">storefront</span> {deal.store_name}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-          );
-        })()}
-
-        {/* Bajó de precio */}
-        {priceDrops.length > 0 && (
-          <section className="mt-6 mb-6">
-            <div className="flex items-center justify-between px-4 pb-3">
-              <div>
-                <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">📉 Bajó de precio</h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Productos más baratos que la última vez que los viste
-                </p>
-              </div>
-              <div className="flex items-center gap-1 text-red-500 text-sm font-semibold">
-                <span className="material-symbols-outlined text-[16px]">arrow_downward</span>
-                Bajan ahora
-              </div>
-            </div>
-            <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar pb-2">
-              {priceDrops.map((drop) => (
-                <div
-                  key={`drop-${drop.productId}`}
-                  onClick={() => navigate(`/product/${drop.productId}`)}
-                  className="flex-none w-52 bg-red-50 dark:bg-red-900/10 rounded-xl overflow-hidden border border-red-200 dark:border-red-800/30 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
-                >
-                  <div className="relative h-28 w-full bg-white dark:bg-slate-900 flex items-center justify-center">
-                    <div className="absolute top-2 left-2 z-10 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                      -{Math.round(drop.dropPercent)}%
-                    </div>
-                    <div className="absolute top-2 right-2 z-10 size-6 overflow-hidden">
-                      <StoreLogo slug={drop.storeSlug} name={drop.storeName} className="size-full shadow-sm" />
-                    </div>
-                    <img src={drop.imageUrl} alt={drop.name} className="size-full object-contain p-3 group-hover:scale-110 transition-transform" />
-                  </div>
-                  <div className="p-3">
-                    <h4 className="text-slate-900 dark:text-white text-xs font-bold leading-tight line-clamp-2 mb-2">{drop.name}</h4>
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-red-600 dark:text-red-400 text-base font-bold">{formatCurrency(drop.currentPrice)}</span>
-                      <span className="text-slate-400 text-xs line-through">{formatCurrency(drop.previousPrice)}</span>
-                    </div>
-                    <p className="text-red-500 dark:text-red-400 text-[10px] font-bold mt-1">
-                      Ahorrás {formatCurrency(drop.dropAmount)} en {drop.storeName}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Canasta Básica */}
+        {/* ── CANASTA DEL DÍA ─────────────────────────────────────────────── */}
         {(loadingBasket || basket.length > 0) && (
-          <section className="mt-6 mb-6 px-4">
+          <section className="px-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-slate-900 dark:text-white text-lg font-bold tracking-tight">Canasta Básica</h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  {selectedStore && STORE_META[selectedStore]
-                    ? `Precios de hoy en ${STORE_META[selectedStore].name}`
-                    : 'Mejores precios disponibles'}
+                <h3 className="text-slate-900 dark:text-white text-base font-bold tracking-tight">Canasta del día</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {storeName ? `Precios en ${storeName}` : 'Mejores precios disponibles'}
                 </p>
               </div>
-              {!loadingBasket && basket.length > 0 && (
+              {!loadingBasket && (
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total estimado</span>
-                  <span className="text-lg font-black text-primary">
-                    {formatCurrency(basket.reduce((s, i) => s + i.price, 0))}
-                  </span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total</span>
+                  <span className="text-lg font-black text-primary">{formatCurrency(totalBasket)}</span>
                 </div>
               )}
             </div>
@@ -605,10 +432,10 @@ const Home: React.FC = () => {
               {loadingBasket
                 ? [1,2,3,4].map(i => (
                     <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-slate-700/50 last:border-0 animate-pulse">
-                      <div className="size-10 rounded-lg bg-slate-200 dark:bg-slate-700 shrink-0" />
+                      <div className="size-10 rounded-xl bg-slate-200 dark:bg-slate-700 shrink-0" />
                       <div className="flex-1 space-y-1.5">
-                        <div className="h-3 w-24 bg-slate-200 dark:bg-slate-700 rounded" />
-                        <div className="h-2.5 w-36 bg-slate-100 dark:bg-slate-700/50 rounded" />
+                        <div className="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-2.5 w-32 bg-slate-100 dark:bg-slate-700/50 rounded" />
                       </div>
                       <div className="h-4 w-14 bg-slate-200 dark:bg-slate-700 rounded" />
                     </div>
@@ -619,17 +446,30 @@ const Home: React.FC = () => {
                       onClick={() => navigate(`/product/${item.productId}`)}
                       className={`flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-slate-50 dark:active:bg-slate-700/50 transition-colors ${idx < basket.length - 1 ? 'border-b border-slate-100 dark:border-slate-700/50' : ''}`}
                     >
-                      <div className="size-10 rounded-lg bg-slate-50 dark:bg-slate-900 flex items-center justify-center shrink-0 overflow-hidden">
+                      <div className="size-10 rounded-xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center shrink-0 overflow-hidden">
                         {item.imageUrl
                           ? <img src={item.imageUrl} alt={item.name} className="size-9 object-contain" />
                           : <span className="material-symbols-outlined text-primary text-[20px]">{item.icon}</span>
                         }
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{item.label}</p>
-                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">{item.name}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{item.label}</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{item.name}</p>
                       </div>
-                      <span className="text-base font-black text-primary shrink-0">{formatCurrency(item.price)}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-base font-black text-primary">{formatCurrency(item.price)}</span>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (!isInCart(item.productId)) {
+                              addItem({ product_id: item.productId, name: item.name, brand: '', image_url: item.imageUrl, price: item.price, store_slug: selectedStore ?? '', store_name: storeName ?? '' });
+                            }
+                          }}
+                          className={`size-7 rounded-full flex items-center justify-center transition-all active:scale-90 ${isInCart(item.productId) ? 'bg-primary text-background-dark' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">{isInCart(item.productId) ? 'check' : 'add'}</span>
+                        </button>
+                      </div>
                     </div>
                   ))
               }
@@ -637,17 +477,131 @@ const Home: React.FC = () => {
 
             {!loadingBasket && basket.length > 0 && (
               <button
-                onClick={() => navigate(`/search?store=${selectedStore ?? ''}`)}
-                className="w-full mt-3 py-3 rounded-xl border-2 border-primary/30 text-primary text-sm font-bold flex items-center justify-center gap-2 active:bg-primary/5 transition-colors"
+                onClick={() => {
+                  basket.forEach(item => {
+                    if (!isInCart(item.productId)) {
+                      addItem({ product_id: item.productId, name: item.name, brand: '', image_url: item.imageUrl, price: item.price, store_slug: selectedStore ?? '', store_name: storeName ?? '' });
+                    }
+                  });
+                  navigate('/cart');
+                }}
+                className="w-full mt-3 py-3.5 rounded-xl bg-primary text-background-dark text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-primary/20"
               >
                 <span className="material-symbols-outlined text-[18px]">shopping_cart</span>
-                Planear mi compra completa
+                Agregar toda la canasta · {formatCurrency(totalBasket)}
               </button>
             )}
           </section>
         )}
 
-        {/* Savings Card deshabilitada — KAIROS inactivo */}
+        {/* ── ALERTAS (bajadas + mínimos) ──────────────────────────────────── */}
+        {allAlerts.length > 0 && (
+          <section className="px-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-slate-900 dark:text-white text-base font-bold tracking-tight">Alertas de precio</h3>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{allAlerts.length} producto{allAlerts.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="space-y-2">
+              {allAlerts.slice(0, 5).map(alert => (
+                <div
+                  key={`alert-${alert.type}-${alert.id}`}
+                  onClick={() => navigate(`/product/${alert.id}`)}
+                  className="flex items-center gap-3 bg-white dark:bg-slate-800/60 rounded-xl px-3 py-2.5 border border-slate-100 dark:border-slate-700 cursor-pointer active:scale-[0.98] transition-transform"
+                >
+                  <div className={`size-8 rounded-lg flex items-center justify-center shrink-0 ${alert.type === 'drop' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30'}`}>
+                    <span className={`material-symbols-outlined text-[16px] ${alert.type === 'drop' ? 'text-red-500' : 'text-emerald-500'}`}>
+                      {alert.type === 'drop' ? 'arrow_downward' : 'trending_down'}
+                    </span>
+                  </div>
+                  <div className="size-10 shrink-0 bg-slate-50 dark:bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center">
+                    <img src={alert.imageUrl} alt={alert.name} className="size-9 object-contain" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">{alert.name}</p>
+                    <p className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-[10px]">storefront</span>{alert.storeName}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end shrink-0">
+                    <span className={`text-base font-black ${alert.type === 'drop' ? 'text-red-500' : 'text-emerald-500'}`}>
+                      {formatCurrency(alert.price)}
+                    </span>
+                    {alert.pct && (
+                      <span className="text-[10px] font-bold text-red-400">-{Math.round(alert.pct)}%</span>
+                    )}
+                    {alert.type === 'low' && (
+                      <span className="text-[9px] font-bold text-emerald-400 uppercase">Mínimo</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── OFERTAS FLASH ────────────────────────────────────────────────── */}
+        <section>
+          <div className="flex items-center justify-between px-4 mb-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-slate-900 dark:text-white text-base font-bold tracking-tight">
+                {storeName ? `Ofertas en ${storeName}` : 'Ofertas flash'}
+              </h3>
+              <span className="flex size-5 items-center justify-center">
+                <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-primary opacity-60" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
+              </span>
+            </div>
+            <button
+              onClick={handleRefreshDeals}
+              disabled={refreshingDeals || searchingDeals}
+              className="flex items-center justify-center size-8 rounded-full bg-primary/10 text-primary border border-primary/20 active:scale-90 transition-all disabled:opacity-40"
+            >
+              <span className={`material-symbols-outlined text-[18px] ${refreshingDeals ? 'animate-spin' : ''}`}>refresh</span>
+            </button>
+          </div>
+          <div className="flex gap-3 px-4 overflow-x-auto no-scrollbar pb-2">
+            {searchingDeals
+              ? [1,2,3].map(i => <div key={i} className="flex-none w-40 h-52 animate-pulse bg-slate-200 dark:bg-slate-800 rounded-2xl" />)
+              : (deals.length > 0 ? deals : essentialProducts.map(p => ({
+                  product_id: p.id, product_name: p.name, image_url: p.image_url,
+                  price: p.best_price ?? 0, list_price: null, store_slug: p.prices?.[0]?.store_slug ?? '',
+                  store_name: p.prices?.[0]?.store_name ?? '', brand: p.brand ?? '', discount_percent: null,
+                }))).map(deal => (
+                <div
+                  key={`deal-${deal.product_id}-${deal.store_slug}`}
+                  onClick={() => navigate(`/product/${deal.product_id}`)}
+                  className="flex-none w-40 bg-white dark:bg-slate-800 rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="relative h-28 bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+                    {deal.discount_percent && (
+                      <span className="absolute top-2 left-2 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                        -{Math.round(deal.discount_percent)}%
+                      </span>
+                    )}
+                    <div className="absolute top-2 right-2 size-5 overflow-hidden rounded">
+                      <StoreLogo slug={deal.store_slug} name={deal.store_name} className="size-full" />
+                    </div>
+                    <img src={deal.image_url} alt={deal.product_name} className="size-full object-contain p-3" />
+                  </div>
+                  <div className="p-3">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight mb-1">{deal.product_name}</p>
+                    <p className="text-primary text-base font-black">{formatCurrency(deal.price)}</p>
+                    {deal.list_price && (
+                      <p className="text-slate-400 text-[10px] line-through">{formatCurrency(deal.list_price)}</p>
+                    )}
+                  </div>
+                </div>
+              ))
+            }
+            {!searchingDeals && deals.length === 0 && essentialProducts.length === 0 && (
+              <div className="text-center py-8 w-full">
+                <span className="material-symbols-outlined text-slate-300 text-[40px]">local_offer</span>
+                <p className="text-slate-500 text-sm mt-2">Sin ofertas registradas hoy.</p>
+              </div>
+            )}
+          </div>
+        </section>
+
       </main>
     </div>
   );
