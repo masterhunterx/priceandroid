@@ -1,2 +1,6 @@
 /build/*
 !/build/.npmkeep
+
+# Keystore — NUNCA commitear
+*.jks
+*.keystore
