@@ -102,7 +102,7 @@ for table in TABLES_ORDER:
     pg_cur.execute(f"""
         SELECT column_name FROM information_schema.columns
         WHERE table_name = %s AND table_schema = 'public'
-    """, (table,))
+    """, (table,))  # nosec B608 — table name from internal code, not user input
     dst_cols = {r[0] for r in pg_cur.fetchall()}
     common   = [c for c in src_cols if c in dst_cols]
 
@@ -111,7 +111,7 @@ for table in TABLES_ORDER:
         continue
 
     # Contar filas
-    sqlite_cur.execute(f'SELECT COUNT(*) FROM "{table}"')
+    sqlite_cur.execute(f'SELECT COUNT(*) FROM "{table}"')  # nosec B608
     count = sqlite_cur.fetchone()[0]
     if count == 0:
         print(f"  [{table}] vacia, saltando.")
@@ -128,7 +128,7 @@ for table in TABLES_ORDER:
 
     # Leer y bulk-insert
     col_list = ", ".join(f'"{c}"' for c in common)
-    sqlite_cur.execute(f'SELECT {col_list} FROM "{table}"')
+    sqlite_cur.execute(f'SELECT {col_list} FROM "{table}"')  # nosec B608
 
     inserted = 0
     while True:
@@ -146,7 +146,7 @@ for table in TABLES_ORDER:
             batch.append(tuple(r))
 
         placeholders = "(" + ", ".join(["%s"] * len(common)) + ")"
-        insert_sql   = f'INSERT INTO "{table}" ({col_list}) VALUES %s'
+        insert_sql   = f'INSERT INTO "{table}" ({col_list}) VALUES %s'  # nosec B608
         try:
             psycopg2.extras.execute_values(
                 pg_cur, insert_sql, batch,
@@ -170,7 +170,7 @@ print(f"\n  Total: {total_rows:,} filas copiadas.")
 print("\n[4/4] Reseteando secuencias...")
 for table in TABLES_ORDER:
     try:
-        pg_cur.execute(f"""
+        pg_cur.execute(f"""  # nosec B608 — table from TABLES_ORDER constant, not user input
             SELECT setval(
                 pg_get_serial_sequence('{table}', 'id'),
                 COALESCE((SELECT MAX(id) FROM "{table}"), 1)

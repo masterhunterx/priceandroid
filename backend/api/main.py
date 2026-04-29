@@ -447,4 +447,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     debug_mode = os.getenv("DEBUG", "false").lower() == "true"
-    uvicorn.run("api.main:app", host="0.0.0.0", port=port, reload=debug_mode)
+    uvicorn.run("api.main:app", host="0.0.0.0", port=port, reload=debug_mode)  # nosec B104

@@ -23,7 +23,14 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt bandit
+
+      - name: Security scan (Bandit)
+        working-directory: backend
+        run: |
+          bandit -r . -ll \
+            --exclude ./.venv,./tests,./scripts,./migrate_to_postgres.py \
+            -f txt
 
       - name: Run unit tests (no network required)
         working-directory: backend

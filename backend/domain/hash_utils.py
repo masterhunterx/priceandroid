@@ -16,7 +16,7 @@ def compute_content_hash(product_data: dict) -> str:
         str(product_data.get("measurement_unit", "")),
         str(product_data.get("in_stock", "")),
     )
-    return hashlib.md5("|".join(fields).encode()).hexdigest()
+    return hashlib.md5("|".join(fields).encode(), usedforsecurity=False).hexdigest()  # nosec B324
 
 
 def price_changed(sp: StoreProduct, new_price: float | None) -> bool:
