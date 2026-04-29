@@ -55,6 +55,7 @@ jobs:
           HUGGINGFACE_TOKEN: ""
           LIDER_PW_HEADLESS: "0"
           DISPLAY: ":99"
+          PYTHONPATH: "."
         run: |
           Xvfb :99 -screen 0 1280x720x24 -ac &
           sleep 2
