@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy import desc
 
@@ -80,6 +80,8 @@ def submit_feedback(body: FeedbackIn):
     })
 
 
+_VALID_STATUSES = {'pending', 'analyzed', 'resolved', 'dismissed'}
+
 @router.get("", response_model=UnifiedResponse)
 def list_feedback(
     status: Optional[str] = Query(None, description="Filtrar por estado: pending, analyzed, resolved, dismissed"),
@@ -87,6 +89,8 @@ def list_feedback(
     limit: int = Query(50, ge=1, le=200),
 ):
     """Lista todos los reportes de feedback ordenados por fecha."""
+    if status and status not in _VALID_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Status inválido. Valores válidos: {_VALID_STATUSES}")
     with get_session() as session:
         q = session.query(Feedback).order_by(desc(Feedback.created_at))
         if status:

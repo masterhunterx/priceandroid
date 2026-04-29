@@ -41,7 +41,7 @@ const getCartKey = () => {
 };
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [cartKey] = useState(getCartKey);
+  const [cartKey, setCartKey] = useState(getCartKey);
   const [items, setItems] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem(getCartKey());
@@ -52,6 +52,34 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     try { localStorage.setItem(cartKey, JSON.stringify(items)); } catch {}
   }, [cartKey, items]);
+
+  // Detecta login/logout: migra el carrito guest al carrito del usuario recién autenticado
+  useEffect(() => {
+    function onStorage() {
+      const newKey = getCartKey();
+      if (newKey === cartKey) return;
+      try {
+        const guestItems: CartItem[] = JSON.parse(localStorage.getItem(cartKey) || '[]');
+        if (guestItems.length > 0) {
+          const existing: CartItem[] = JSON.parse(localStorage.getItem(newKey) || '[]');
+          if (existing.length === 0) {
+            localStorage.setItem(newKey, JSON.stringify(guestItems));
+            setItems(guestItems);
+          }
+          localStorage.removeItem(cartKey);
+        } else {
+          // no hay items que migrar: carga el carrito del nuevo usuario
+          try {
+            const saved = localStorage.getItem(newKey);
+            setItems(saved ? JSON.parse(saved) : []);
+          } catch { setItems([]); }
+        }
+      } catch {}
+      setCartKey(newKey);
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [cartKey]);
 
   const itemCount = items.length;
   const total = items.reduce((s, i) => s + i.price * i.qty, 0);

@@ -150,8 +150,10 @@ def _enrich_results(
         # Fallback para productos no emparejados (unmatched)
         # ID negativo: convencion interna para store_products sin canonical match.
         # Evita colision con product.id cuando sp.id > 1_000_000.
+        if sp.store is None:
+            continue
         latest_price_obj = sp.latest_price
-        price_val = latest_price_obj.price if latest_price_obj else 0
+        price_val = (latest_price_obj.price or 0) if latest_price_obj else 0
         results.append(ProductOut(
             id=-(sp.id),
             name=sp.name,

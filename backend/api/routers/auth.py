@@ -454,6 +454,8 @@ def refresh_access_token(
     payload = _decode_token(credentials.credentials)
     if payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Se requiere un refresh token.")
+    if _is_token_revoked(payload):
+        raise HTTPException(status_code=401, detail="Token revocado.")
     username = payload.get("sub")
     _touch_session(username)
     access_exp = timedelta(hours=ACCESS_EXP)

@@ -20,6 +20,9 @@ const Login: React.FC = () => {
   useEffect(() => {
     if (!pendingUser) return;
 
+    let attempts = 0;
+    const MAX_ATTEMPTS = 3;
+
     pollRef.current = setInterval(async () => {
       try {
         const resp = await fetch(`${API_BASE_URL}/auth/approval-status/${pendingUser}`);
@@ -30,8 +33,15 @@ const Login: React.FC = () => {
           const result = await login(pendingUser, pendingPwd);
           if (result === 'ok') navigate('/store-select', { replace: true });
         }
+        attempts = 0;
       } catch {
-        // ignorar errores de red durante polling
+        attempts++;
+        if (attempts >= MAX_ATTEMPTS) {
+          clearInterval(pollRef.current!);
+          setError('No se pudo conectar. Intenta de nuevo.');
+          setPendingUser('');
+          setPendingPwd('');
+        }
       }
     }, 5000);
 

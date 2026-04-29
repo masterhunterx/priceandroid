@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone, timedelta
 from core.db import get_session
 from core.models import PantryItem, Product
+from sqlalchemy.orm import joinedload
 from ..schemas import UnifiedResponse, PantryItemOut, PantryPurchaseRequest
 from ..middleware import get_api_key
 
@@ -26,6 +27,7 @@ def get_pantry(current_user: str = Depends(get_api_key)):
     with get_session() as session:
         items = (
             session.query(PantryItem)
+            .options(joinedload(PantryItem.product))
             .filter(PantryItem.user_id == user_id, PantryItem.is_active == True)
             .all()
         )
@@ -101,11 +103,6 @@ def buy_pantry_items(purchases: List[PantryPurchaseRequest], current_user: str =
                 )
                 session.add(new_item)
 
-        try:
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise HTTPException(status_code=500, detail="Error al guardar en despensa.")
         return UnifiedResponse(data={"message": "Pantry updated successfully"})
 
 
@@ -128,9 +125,4 @@ def consume_pantry_item(item_id: int, current_user: str = Depends(get_api_key)):
         elif item.current_stock_level == "low":
             item.current_stock_level = "empty"
 
-        try:
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise HTTPException(status_code=500, detail="Error al actualizar stock.")
         return UnifiedResponse(data={"message": f"Stock level updated to {item.current_stock_level}"})

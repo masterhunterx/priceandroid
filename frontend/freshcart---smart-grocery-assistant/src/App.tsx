@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -39,7 +39,17 @@ const PageTransition = ({ children }: { children: React.ReactNode }) => {
 const AppContent: React.FC = () => {
   const [isAppReady, setIsAppReady] = useState(false);
   const location = useLocation();
-  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const { isAuthenticated, logout } = useAuth();
+
+  useEffect(() => {
+    function onForceLogout() {
+      logout();
+      navigate('/login', { replace: true });
+    }
+    window.addEventListener('freshcart:logout', onForceLogout);
+    return () => window.removeEventListener('freshcart:logout', onForceLogout);
+  }, [logout, navigate]);
 
   const isLoginPage = location.pathname === '/login';
   const isStoreSelectPage = location.pathname === '/store-select';

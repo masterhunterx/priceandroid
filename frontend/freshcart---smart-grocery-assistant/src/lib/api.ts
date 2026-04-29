@@ -63,9 +63,12 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   let resp: Response;
   try {
     resp = await _rawFetch(url, { ...options, signal: timeoutController.signal });
-  } catch (err) {
+  } catch (err: any) {
     clearTimeout(timeoutId);
-    throw err; // AbortError por timeout u otro error de red
+    if (err?.name === 'AbortError') {
+      throw new Error('La conexión tardó demasiado. Verifica tu internet e intenta de nuevo.');
+    }
+    throw err;
   }
   clearTimeout(timeoutId);
 
@@ -78,10 +81,10 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   const newToken = await _refreshPromise;
 
   if (!newToken) {
-    // Refresh falló — limpiar sesión y redirigir
+    // Refresh falló — limpiar sesión y notificar a la app
     localStorage.removeItem('freshcart_access_token');
     localStorage.removeItem('freshcart_refresh_token');
-    window.location.href = '/login';
+    window.dispatchEvent(new CustomEvent('freshcart:logout'));
     return resp;
   }
 
@@ -101,7 +104,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   if (resp.status === 401) {
     localStorage.removeItem('freshcart_access_token');
     localStorage.removeItem('freshcart_refresh_token');
-    window.location.href = '/login';
+    window.dispatchEvent(new CustomEvent('freshcart:logout'));
   }
   return resp;
 }
@@ -175,7 +178,8 @@ export async function getFavorites(limit = 50, offset = 0): Promise<Product[]> {
     { headers: getHeaders() }
   );
   const data = await response.json();
-  return data.data;
+  if (!data.success) return [];
+  return data.data ?? [];
 }
 
 export async function toggleFavorite(productId: number | string): Promise<{ is_favorite: boolean; message: string }> {

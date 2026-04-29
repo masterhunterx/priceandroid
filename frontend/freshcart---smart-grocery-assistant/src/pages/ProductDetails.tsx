@@ -40,7 +40,7 @@ const ProductDetails: React.FC = () => {
   const [substitutes, setSubstitutes] = useState<Product[]>([]);
   const [isFavorite, setIsFavorite] = useState(false);
 
-  const loadProduct = async (silent = false) => {
+  const loadProduct = async (silent = false, cancelled?: { value: boolean }) => {
     if (!id) return;
     const numericId = parseInt(id, 10);
     if (isNaN(numericId)) return;
@@ -48,6 +48,7 @@ const ProductDetails: React.FC = () => {
     try {
       const branchContext = getBranchContext();
       const data = await getProductDetails(numericId, branchContext);
+      if (cancelled?.value) return;
       setProduct(data);
       setIsFavorite(data.is_favorite ?? false);
       // Guardar snapshot de precio para detección de "Bajó de precio" en Home
@@ -66,12 +67,14 @@ const ProductDetails: React.FC = () => {
     } catch (error) {
       console.error('Error loading product details:', error);
     } finally {
-      if (!silent) setLoading(false);
+      if (!cancelled?.value && !silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadProduct();
+    const cancelled = { value: false };
+    loadProduct(false, cancelled);
+    return () => { cancelled.value = true; };
   }, [id]);
 
   useEffect(() => {
@@ -130,7 +133,7 @@ const ProductDetails: React.FC = () => {
     if (!product) return;
     const shareData = {
       title: product.name,
-      text: `¡Mira esta oferta en FreshCart! ${product.name} a solo ${formatCurrency(product.best_price)}`,
+      text: `¡Mira esta oferta en FreshCart! ${product.name} a solo ${product.best_price != null ? formatCurrency(product.best_price) : 'precio no disponible'}`,
       url: window.location.href,
     };
 
@@ -152,7 +155,7 @@ const ProductDetails: React.FC = () => {
       removeItem(product.id);
       toast('Eliminado del carro', { icon: '🗑️', style: { borderRadius: '10px', background: '#333', color: '#fff' } });
     } else {
-      const bestPricePoint = product.prices.find(p => p.in_stock && p.price === product.best_price);
+      const bestPricePoint = product.prices?.find(p => p.in_stock && p.price === product.best_price);
       addItem({
         product_id: product.id,
         name: product.name,
@@ -251,7 +254,7 @@ const ProductDetails: React.FC = () => {
               
                 <div className="flex items-center gap-2 mt-4">
                   {(() => {
-                    const latestSync = product.prices.reduce((latest, p) => {
+                    const latestSync = product.prices?.reduce((latest, p) => {
                       if (!p.last_sync) return latest;
                       const current = new Date(p.last_sync).getTime();
                       return current > latest ? current : latest;
@@ -434,7 +437,7 @@ const ProductDetails: React.FC = () => {
             </button>
           </div>
           <div className="space-y-3">
-            {product.prices
+            {(product.prices ?? [])
               .sort((a, b) => {
                 const stockA = a.in_stock ? 0 : 1;
                 const stockB = b.in_stock ? 0 : 1;

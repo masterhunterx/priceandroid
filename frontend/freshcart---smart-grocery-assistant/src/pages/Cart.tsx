@@ -107,7 +107,7 @@ const Cart: React.FC = () => {
             <div className="space-y-2">
               {group.items.map(item => (
                 <div
-                  key={String(item.product_id)}
+                  key={`${item.product_id}-${item.store_slug || ''}`}
                   className="bg-white dark:bg-[#0a150f] rounded-2xl border border-slate-100 dark:border-slate-800 p-3 flex gap-3 items-center shadow-sm"
                 >
                   {/* Image */}

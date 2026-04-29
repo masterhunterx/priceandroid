@@ -68,7 +68,7 @@ def optimize_cart_endpoint(req: OptimizeCartRequest):
 @router.get("/favorites", response_model=UnifiedResponse)
 def get_favorites(
     limit: int = Query(50, ge=1, le=200, description="Máximo de favoritos a retornar"),
-    offset: int = Query(0, ge=0, description="Desplazamiento para paginación"),
+    offset: int = Query(0, ge=0, le=10000, description="Desplazamiento para paginación"),
     current_user: str = Depends(get_api_key),
 ):
     """
@@ -132,7 +132,6 @@ def toggle_favorite(data: FavoriteAction, current_user: str = Depends(get_api_ke
             msg = "Agregado a favoritos"
             status = True
 
-        session.commit()
         return UnifiedResponse(success=True, data={"is_favorite": status, "message": msg})
 
 
@@ -173,7 +172,6 @@ def mark_notification_read(notification_id: int, current_user: str = Depends(get
         if not notif or notif.user_id != user_id:
             raise HTTPException(status_code=404, detail="Notification not found")
         notif.is_read = True
-        session.commit()
         return UnifiedResponse(success=True, data={"id": notification_id, "is_read": True})
 
 
@@ -186,7 +184,6 @@ def delete_notification(notification_id: int, current_user: str = Depends(get_ap
         if not notif or notif.user_id != user_id:
             raise HTTPException(status_code=404, detail="Notification not found")
         session.delete(notif)
-        session.commit()
         return UnifiedResponse(success=True, data={"deleted": notification_id})
 
 
@@ -202,7 +199,6 @@ def clear_read_notifications(current_user: str = Depends(get_api_key)):
         count = len(read_notifs)
         for n in read_notifs:
             session.delete(n)
-        session.commit()
         return UnifiedResponse(success=True, data={"deleted_count": count})
 
 
@@ -255,7 +251,6 @@ def clear_chat_history(current_user: str = Depends(get_api_key)):
         ctx = MealPlannerContext()
         state = ctx.get_or_create_state(session)
         state.chat_history_json = "[]"
-        session.commit()
         return UnifiedResponse(data={"message": "Historial borrado. ¡Empecemos de nuevo!"})
 
 
@@ -528,7 +523,6 @@ def assistant_chat_endpoint(req: ChatRequest, current_user: str = Depends(get_ap
             saved_history = saved_history[-(MAX_HISTORY_TURNS * 2):]
 
         state.chat_history_json = json.dumps(saved_history, ensure_ascii=False)
-        session.commit()
 
         return UnifiedResponse(data={
             "reply": assistant_reply,

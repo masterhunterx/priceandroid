@@ -121,7 +121,7 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (e.key === 'user_coords') {
         try { setCoords(e.newValue ? JSON.parse(e.newValue) : null); } catch {}
       } else if (e.key === 'selected_branches') {
-        try { setSelectedBranches(e.newValue ? JSON.parse(e.newValue) : null); } catch {}
+        try { setSelectedBranches(e.newValue ? JSON.parse(e.newValue) : {}); } catch {}
       } else if (e.key === 'user_location_name') {
         setSelectedLocationName(e.newValue);
       } else if (e.key === 'selected_store') {
@@ -179,7 +179,7 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
   
   const clearLocation = () => {
     setCoords(null);
-    setSelectedBranches(null);
+    setSelectedBranches({});
     setSelectedLocationName(null);
     localStorage.removeItem('user_location_name');
     localStorage.setItem('location_dismissed', 'true');

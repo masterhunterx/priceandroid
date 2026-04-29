@@ -146,7 +146,8 @@ const SearchResults: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [query, categoryParam, sort, store, page, getBranchContext]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, categoryParam, sort, store, page]);
 
   // ── Scroll infinito ───────────────────────────────────────────────────────────
   const hasMore = results.length < total;
@@ -486,7 +487,7 @@ const SearchResults: React.FC = () => {
                       src={product.image_url}
                       alt={product.name}
                       className="size-full object-contain"
-                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                     />
                   </div>
                 </div>

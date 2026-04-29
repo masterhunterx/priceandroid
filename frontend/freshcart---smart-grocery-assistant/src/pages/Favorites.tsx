@@ -14,21 +14,27 @@ const Favorites: React.FC = () => {
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
 
-  async function loadFavorites(pageNum: number, append = false) {
+  async function loadFavorites(pageNum: number, append = false, cancelled?: { value: boolean }) {
     try {
       const data = await getFavorites(PAGE_SIZE, pageNum * PAGE_SIZE);
+      if (cancelled?.value) return;
       setFavorites(prev => append ? [...prev, ...data] : data);
       setHasMore(data.length === PAGE_SIZE);
     } catch (error) {
+      if (cancelled?.value) return;
       console.error('Error loading favorites:', error);
     } finally {
-      if (!append) setLoading(false);
-      setLoadingMore(false);
+      if (!cancelled?.value) {
+        if (!append) setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }
 
   useEffect(() => {
-    loadFavorites(0);
+    const cancelled = { value: false };
+    loadFavorites(0, false, cancelled);
+    return () => { cancelled.value = true; };
   }, []);
 
   const handleLoadMore = () => {

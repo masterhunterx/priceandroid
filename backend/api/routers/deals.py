@@ -255,6 +255,8 @@ def list_deals(
 
         all_deals = []
         for sp, price, store_obj in rows:
+            if price.price is None:
+                continue
             # Recalcular desde list_price/price para mayor precisión
             discount_pct = None
             if price.list_price and price.list_price > 0 and price.price is not None:
