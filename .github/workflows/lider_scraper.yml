@@ -62,7 +62,7 @@ jobs:
 
           for query in leche arroz aceite pan pollo carne fideos azucar sal cafe; do
             echo "=== Scrapeando: $query ==="
-            python domain/ingest.py --search "$query" --stores lider --pages 2 || true
+            python -m domain.ingest --search "$query" --stores lider --pages 2 || true
           done
 
       - name: Report result
