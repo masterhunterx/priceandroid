@@ -168,6 +168,8 @@ _PX_CACHE_TTL = 1800  # 30 min
 
 
 def _playwright_available() -> bool:
+    if _PW_DISABLED:
+        return False
     try:
         import playwright  # noqa: F401
         return True
@@ -393,7 +395,9 @@ def fetch_products_page(session, query, page, store_id=None):
 # ---------------------------------------------------------------------------
 
 # Control headed/headless via env var. Headless is blocked by PX; headed works.
-_PW_HEADLESS = os.getenv("LIDER_PW_HEADLESS", "0") == "1"
+_RAILWAY = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"))
+_PW_HEADLESS = os.getenv("LIDER_PW_HEADLESS", "1" if _RAILWAY else "0") == "1"
+_PW_DISABLED = _RAILWAY  # En Railway no hay display; skip Playwright completamente
 # Persistent profile path — reusing it builds PX trust over time
 _PW_PROFILE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "lider_browser_profile")
 

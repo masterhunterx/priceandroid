@@ -262,6 +262,12 @@ def normalize_product(raw_product):
     # Promotions / Club info
     promo_description = raw_product.get("promotionTag", "")
     best_promo_price = None
+    promotions = item.get("promotions", [])
+    for promo in promotions:
+        up = promo.get("unitPrice")
+        if up and (best_promo_price is None or up < best_promo_price):
+            best_promo_price = up
+            promo_description = promo.get("description", "") or promo_description
 
     # Build clean category path
     categories = raw_product.get("categories", [])

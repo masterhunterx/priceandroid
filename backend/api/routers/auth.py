@@ -58,6 +58,21 @@ _RL_CLEANUP_THRESHOLD = int(_RL_MAX_IPS * 0.90)  # limpiar al 90% de capacidad
 _login_attempts: dict = defaultdict(list)
 _rl_lock = Lock()
 
+_enum_attempts: dict = defaultdict(list)
+_enum_lock = Lock()
+
+def _check_enum_limit(ip: str) -> bool:
+    """20 checks/min por IP para /approval-status — previene enumeración masiva."""
+    now = time.time()
+    with _enum_lock:
+        recent = [t for t in _enum_attempts[ip] if now - t < _RL_WINDOW]
+        if len(recent) >= 20:
+            _enum_attempts[ip] = recent
+            return False
+        recent.append(now)
+        _enum_attempts[ip] = recent
+        return True
+
 
 def _cleanup_stale_ips_unsafe() -> None:
     """Elimina IPs sin actividad reciente. DEBE llamarse con _rl_lock ya adquirido."""
@@ -102,7 +117,7 @@ ADMIN_USERNAME    = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD    = os.getenv("ADMIN_PASSWORD", "")
 ADMIN_APPROVE_KEY = os.getenv("ADMIN_APPROVE_KEY", "")   # token secreto para /approve
 DISCORD_WEBHOOK   = os.getenv("DISCORD_WEBHOOK_URL", "")
-BACKEND_URL       = os.getenv("BACKEND_URL", "https://backend-production-8c5c4.up.railway.app")
+BACKEND_URL       = os.getenv("BACKEND_URL", "")
 
 ALLOWED_USERS: dict[str, str] = {
     ADMIN_USERNAME: ADMIN_PASSWORD,
@@ -421,8 +436,12 @@ def approve_user(username: str, token: str = ""):
 
 
 @router.get("/approval-status/{username}")
-def approval_status(username: str):
+def approval_status(username: str, request: Request):
     """Frontend polling: ¿fue aprobado ya el usuario?"""
+    from api.middleware import _get_real_ip
+    client_ip = _get_real_ip(request)
+    if not _check_enum_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Demasiadas solicitudes. Intenta más tarde.")
     username = username.strip().lower()
     with _approvals_lock:
         approval = _get_approval_if_valid(username)

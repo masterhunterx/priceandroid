@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -80,6 +81,22 @@ _env = os.getenv("ENVIRONMENT", "").lower()
 _is_production = _env != "development"
 _configure_logging(_is_production)
 logger = logging.getLogger("FreshCartAPI")
+
+# --- SCHEDULER DE INGESTA AUTOMÁTICA ---
+def _run_scheduled_ingest():
+    _log = logging.getLogger("FreshCartAPI")
+    queries = ["leche", "arroz", "aceite", "pan", "pollo", "carne", "fideos", "azucar", "sal", "cafe"]
+    store_slugs = ["jumbo", "santa_isabel", "unimarc"]
+    for q in queries:
+        try:
+            from domain.ingest import run_pipeline
+            run_pipeline(query=q, store_slugs=store_slugs)
+        except Exception as e:
+            _log.error(f"[SCHEDULER] Error en ingesta query='{q}': {e}")
+
+_scheduler = BackgroundScheduler(daemon=True)
+_scheduler.add_job(_run_scheduled_ingest, 'interval', hours=8, id='ingest_job')
+
 
 # --- AGENTES EN SEGUNDO PLANO ---
 def _is_running(name: str) -> bool:
@@ -212,16 +229,25 @@ async def lifespan(app: FastAPI):
     # Lanzamiento de agentes en segundo plano
     start_background_agents()
 
+    # --- SCHEDULER DE INGESTA AUTOMÁTICA ---
+    ingest_enabled = os.getenv("INGEST_SCHEDULER", "true").lower() == "true"
+    if ingest_enabled:
+        _scheduler.start()
+        logger.info("[SCHEDULER] Ingesta automática cada 8h activada")
+
     # --- INICIALIZAR DISCORD BOT ---
     import asyncio
     from core.discord_bot import bot, DISCORD_BOT_TOKEN
-    
+
     bot_task = None
     if DISCORD_BOT_TOKEN:
         bot_task = asyncio.create_task(bot.start(DISCORD_BOT_TOKEN))
         logger.info("[KAIROS BOT] Hilo de Asistente Discord asíncrono disparado.")
 
     yield
+
+    if _scheduler.running:
+        _scheduler.shutdown(wait=False)
     
     logger.info("Sistema apagándose...")
     if bot_task:

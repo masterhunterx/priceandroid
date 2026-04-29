@@ -29,6 +29,7 @@ playwright>=1.44.0
 
 # Scheduling
 schedule==1.2.2
+apscheduler>=3.10.0
 
 # JWT Authentication — PyJWT reemplaza python-jose (CVE-2024-33664, CVE-2024-33663)
 PyJWT[crypto]==2.11.0

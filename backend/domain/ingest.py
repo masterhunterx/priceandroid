@@ -491,7 +491,7 @@ def run_pipeline(
     4. Reporte final de estadísticas.
     """
     if store_slugs is None:
-        store_slugs = ["jumbo", "unimarc"]
+        store_slugs = ["jumbo", "santa_isabel", "unimarc"]
 
     print(f"\n{'='*60}")
     print(f"  PIPELINE DE INGESTA ANTIGRAVITY")
