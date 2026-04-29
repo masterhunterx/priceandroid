@@ -114,6 +114,7 @@ def make_round(size):
     out.paste(base, mask=mask)
     return out
 
+# Tamaños normales (ic_launcher.png, ic_launcher_round.png)
 SIZES = {
     "mipmap-mdpi":    48,
     "mipmap-hdpi":    72,
@@ -122,14 +123,37 @@ SIZES = {
     "mipmap-xxxhdpi": 192,
 }
 
+# Tamaños adaptive icon foreground (108dp equivalente en cada densidad)
+# El foreground es 108dp; el contenido debe quedar en el centro 72dp (safe zone).
+ADAPTIVE_SIZES = {
+    "mipmap-mdpi":    108,
+    "mipmap-hdpi":    162,
+    "mipmap-xhdpi":   216,
+    "mipmap-xxhdpi":  324,
+    "mipmap-xxxhdpi": 432,
+}
+
 BASE = r"c:\Users\Cris\Desktop\Nueva carpeta\frontend\freshcart---smart-grocery-assistant\android\app\src\main\res"
+
+def make_foreground(adaptive_size):
+    """Ícono centrado en la safe zone (66.7%) sobre fondo transparente."""
+    icon_size = int(adaptive_size * 72 / 108)  # safe zone
+    icon = make_icon(icon_size)
+    canvas = Image.new("RGBA", (adaptive_size, adaptive_size), (0, 0, 0, 0))
+    offset = (adaptive_size - icon_size) // 2
+    canvas.paste(icon, (offset, offset))
+    return canvas
 
 for folder, size in SIZES.items():
     path = os.path.join(BASE, folder)
     os.makedirs(path, exist_ok=True)
     make_icon(size).convert("RGB").save(os.path.join(path, "ic_launcher.png"))
     make_round(size).save(os.path.join(path, "ic_launcher_round.png"))
-    print(f"  {folder}: {size}x{size} OK")
+
+    # Adaptive icon foreground (reemplaza el X azul de Capacitor)
+    fg_size = ADAPTIVE_SIZES[folder]
+    make_foreground(fg_size).save(os.path.join(path, "ic_launcher_foreground.png"))
+    print(f"  {folder}: {size}px normal, {fg_size}px foreground OK")
 
 # Preview grande
 make_icon(512).save(r"c:\Users\Cris\Desktop\Nueva carpeta\freshcart_icon_preview.png")
