@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BarChart, Bar, ResponsiveContainer, Cell, XAxis, YAxis, Tooltip } from 'recharts';
 import { getProductDetails, formatCurrency, toggleFavorite, syncProduct, readPriceSnapshots, writePriceSnapshots } from '../lib/api';
@@ -39,6 +39,11 @@ const ProductDetails: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [substitutes, setSubstitutes] = useState<Product[]>([]);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [selectedPricePoint, setSelectedPricePoint] = useState<PricePoint | null>(null);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const [pullY, setPullY] = useState(0);
+  const touchStartY = useRef(0);
+  const PULL_THRESHOLD = 70;
 
   const loadProduct = async (silent = false, cancelled?: { value: boolean }) => {
     if (!id) return;
@@ -51,6 +56,8 @@ const ProductDetails: React.FC = () => {
       if (cancelled?.value) return;
       setProduct(data);
       setIsFavorite(data.is_favorite ?? false);
+      const bestPoint = data.prices?.find(p => p.in_stock && p.price === data.best_price) ?? data.prices?.find(p => p.in_stock) ?? null;
+      setSelectedPricePoint(prev => prev ?? bestPoint);
       // Guardar snapshot de precio para detección de "Bajó de precio" en Home
       if (data.best_price != null) {
         const snaps = readPriceSnapshots();
@@ -155,18 +162,36 @@ const ProductDetails: React.FC = () => {
       removeItem(product.id);
       toast('Eliminado del carro', { icon: '🗑️', style: { borderRadius: '10px', background: '#333', color: '#fff' } });
     } else {
-      const bestPricePoint = product.prices?.find(p => p.in_stock && p.price === product.best_price);
+      const pp = selectedPricePoint ?? product.prices?.find(p => p.in_stock && p.price === product.best_price);
       addItem({
         product_id: product.id,
         name: product.name,
         brand: product.brand || '',
         image_url: product.image_url || '',
-        price: product.best_price || 0,
-        store_slug: bestPricePoint?.store_slug || '',
-        store_name: product.best_store || bestPricePoint?.store_name || '',
+        price: pp?.price || product.best_price || 0,
+        store_slug: pp?.store_slug || '',
+        store_name: pp?.store_name || product.best_store || '',
       });
-      toast.success('Agregado al carro', { icon: '🛒', style: { borderRadius: '10px', background: '#333', color: '#fff' } });
+      toast.success(`Agregado al carro — ${pp?.store_name || product.best_store}`, { icon: '🛒', style: { borderRadius: '10px', background: '#333', color: '#fff' } });
     }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY === 0) touchStartY.current = e.touches[0].clientY;
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (window.scrollY > 0 || pullRefreshing) return;
+    const delta = e.touches[0].clientY - touchStartY.current;
+    if (delta > 0) setPullY(Math.min(delta * 0.4, PULL_THRESHOLD));
+  };
+  const handleTouchEnd = async () => {
+    if (pullY >= PULL_THRESHOLD && !pullRefreshing) {
+      setPullRefreshing(true);
+      setSelectedPricePoint(null);
+      await loadProduct();
+      setPullRefreshing(false);
+    }
+    setPullY(0);
   };
 
   if (loading) {
@@ -200,7 +225,21 @@ const ProductDetails: React.FC = () => {
   }));
 
   return (
-    <div className="flex flex-col pb-32">
+    <div
+      className="flex flex-col pb-32"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ transform: pullY > 0 ? `translateY(${pullY}px)` : undefined, transition: pullY === 0 ? 'transform 0.3s ease' : undefined }}
+    >
+      {/* Pull-to-refresh indicator */}
+      {pullY > 0 && (
+        <div className="fixed top-0 left-0 right-0 z-50 flex justify-center" style={{ transform: `translateY(${pullY - 40}px)` }}>
+          <div className={`size-9 rounded-full bg-primary flex items-center justify-center shadow-lg transition-transform ${pullY >= PULL_THRESHOLD ? 'scale-110' : 'scale-90'}`}>
+            <span className={`material-symbols-outlined text-background-dark text-lg ${pullRefreshing ? 'animate-spin' : ''}`}>refresh</span>
+          </div>
+        </div>
+      )}
       <header className="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md">
         <div className="flex items-center p-4 pb-2 justify-between">
           <div
@@ -446,15 +485,22 @@ const ProductDetails: React.FC = () => {
               })
               .map((pricePoint) => {
                 const isBest = product.best_price === pricePoint.price && product.best_store === pricePoint.store_name;
+                const isSelected = selectedPricePoint?.store_id === pricePoint.store_id;
 
                 return (
                   <div
                     key={`store-${pricePoint.store_id}-p-${pricePoint.price}`}
-                    className={`relative overflow-hidden rounded-xl p-4 border-2 transition-all duration-300 ${!pricePoint.in_stock ? 'opacity-60' : ''} ${isBest && pricePoint.in_stock ? 'bg-primary/10 dark:bg-primary/5 border-primary shadow-lg shadow-primary/5' : 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'}`}
+                    onClick={() => pricePoint.in_stock && setSelectedPricePoint(pricePoint)}
+                    className={`relative overflow-hidden rounded-xl p-4 border-2 transition-all duration-300 ${!pricePoint.in_stock ? 'opacity-60' : 'cursor-pointer active:scale-[0.98]'} ${isSelected && pricePoint.in_stock ? 'bg-primary/10 dark:bg-primary/5 border-primary shadow-lg shadow-primary/5' : 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'}`}
                   >
                     {isBest && pricePoint.in_stock && (
                       <div className="absolute top-0 right-0 bg-primary text-background-dark text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase">
                         Mejor Precio
+                      </div>
+                    )}
+                    {isSelected && pricePoint.in_stock && (
+                      <div className="absolute top-2 left-2 size-5 rounded-full bg-primary flex items-center justify-center">
+                        <span className="material-symbols-outlined text-background-dark" style={{ fontSize: '14px' }}>check</span>
                       </div>
                     )}
                     <div className="flex items-center justify-between">
@@ -582,16 +628,19 @@ const ProductDetails: React.FC = () => {
 
       {/* Sticky Footer — bottom-20 para quedar sobre el BottomNav (h-20) */}
       {(() => {
-        const hasStock = product.best_price != null;
+        const pp = selectedPricePoint;
+        const hasStock = pp ? pp.in_stock : product.best_price != null;
+        const displayPrice = pp?.price ?? product.best_price;
+        const displayStore = pp?.store_name ?? product.best_store;
         return (
           <div className="fixed bottom-20 left-0 right-0 z-30 p-4 bg-white/90 dark:bg-[#102217]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800">
             <div className="max-w-md mx-auto flex items-center gap-4">
               <div className="flex flex-col">
                 <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-                  {hasStock ? 'Mejor Precio' : 'Stock'}
+                  {hasStock ? (displayStore || 'Mejor Precio') : 'Stock'}
                 </span>
                 <span className={`text-2xl font-bold ${hasStock ? 'text-primary' : 'text-red-500'}`}>
-                  {hasStock ? formatCurrency(product.best_price) : 'Sin Stock'}
+                  {hasStock ? formatCurrency(displayPrice) : 'Sin Stock'}
                 </span>
               </div>
               <button
