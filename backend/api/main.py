@@ -31,7 +31,7 @@ from .middleware import (
     shield_security_middleware,
 )
 from .exceptions import global_exception_handler, http_exception_handler
-from .routers import products, stores, catalog, deals, pantry, auth, feedback
+from .routers import products, stores, catalog, deals, pantry, auth, feedback, assistant
 from .schemas import UnifiedResponse
 
 
@@ -390,6 +390,7 @@ app.include_router(catalog.router)
 app.include_router(deals.router)
 app.include_router(pantry.router)
 app.include_router(feedback.router)
+app.include_router(assistant.router)   # Chat, favoritos, notificaciones, optimización
 
 # --- TRAMPAS PARA BOTS (HONEYTOKENS) ---
 def _honeytoken_block(request, label: str):

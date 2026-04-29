@@ -476,6 +476,7 @@ def refresh_access_token(
     if _is_token_revoked(payload):
         raise HTTPException(status_code=401, detail="Token revocado.")
     username = payload.get("sub")
+    _revoke_token(payload)  # rotación: cada refresh token solo se usa una vez
     _touch_session(username)
     access_exp = timedelta(hours=ACCESS_EXP)
     return UnifiedResponse(data={
