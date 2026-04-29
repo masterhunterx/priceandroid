@@ -623,7 +623,7 @@ def main():
     )
     parser.add_argument(
         "--stores", nargs="+", default=None,
-        choices=["jumbo", "unimarc"],
+        choices=["jumbo", "unimarc", "lider", "santa_isabel"],
         help="Tiendas a incluir"
     )
     parser.add_argument(
