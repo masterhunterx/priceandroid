@@ -117,7 +117,7 @@ export async function loginUser(username: string, password: string): Promise<{
 }> {
   const resp = await _rawFetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Api-Key': API_KEY },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
   const json = await resp.json();
@@ -128,7 +128,7 @@ export async function loginUser(username: string, password: string): Promise<{
 export async function registerUser(username: string, password: string, email?: string): Promise<{ message: string }> {
   const resp = await _rawFetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Api-Key': API_KEY },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password, email }),
   });
   const json = await resp.json();
