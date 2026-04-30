@@ -118,6 +118,10 @@ ADMIN_PASSWORD    = os.getenv("ADMIN_PASSWORD", "")
 ADMIN_APPROVE_KEY = os.getenv("ADMIN_APPROVE_KEY", "")   # token secreto para /approve
 DISCORD_WEBHOOK   = os.getenv("DISCORD_WEBHOOK_URL", "")
 BACKEND_URL       = os.getenv("BACKEND_URL", "")
+FRONTEND_URL      = os.getenv("FRONTEND_URL", "http://localhost:5001")
+GOOGLE_CLIENT_ID  = os.getenv("GOOGLE_CLIENT_ID", "")
+GMAIL_USER        = os.getenv("GMAIL_USER", "")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 
 ALLOWED_USERS: dict[str, str] = {
     ADMIN_USERNAME: ADMIN_PASSWORD,
@@ -147,6 +151,9 @@ if not ADMIN_APPROVE_KEY:
 # ── Estado en memoria ──────────────────────────────────────────────────────────
 # {username: {"approved": bool, "requested_at": float, "ip": str, "token": str}}
 _pending_approvals: dict = {}
+# {token: {"username": str, "expires_at": float}}
+_reset_tokens: dict[str, dict] = {}
+_reset_lock = Lock()
 _approvals_lock = Lock()
 # M5 — TTL para solicitudes de aprobación: 1 hora.
 # Sin TTL las entradas se acumulan indefinidamente en memoria.
@@ -359,6 +366,16 @@ class ProfileUpdateRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
+    new_password: str
+
+class GoogleLoginRequest(BaseModel):
+    credential: str  # Google ID token
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
     new_password: str
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -764,6 +781,153 @@ def approve_user_db(username: str,
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error al aprobar usuario.")
+
+
+def _send_reset_email(to_email: str, username: str, token: str) -> None:
+    """Envía email de recuperación via Gmail SMTP en hilo separado."""
+    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
+        logger.warning("[AUTH] GMAIL_USER/GMAIL_APP_PASSWORD no configurados — email omitido")
+        return
+    reset_url = f"{FRONTEND_URL}/login?reset_token={token}"
+    body = (
+        f"Hola {username},\n\n"
+        f"Recibimos una solicitud para restablecer la contraseña de tu cuenta FreshCart.\n\n"
+        f"Haz clic en el siguiente enlace (válido por 15 minutos):\n{reset_url}\n\n"
+        f"Si no solicitaste esto, ignora este mensaje.\n\n— Equipo FreshCart"
+    )
+    def _send():
+        import smtplib
+        from email.mime.text import MIMEText
+        try:
+            msg = MIMEText(body, "plain", "utf-8")
+            msg["Subject"] = "FreshCart — Recuperación de contraseña"
+            msg["From"] = GMAIL_USER
+            msg["To"] = to_email
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+                smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+                smtp.sendmail(GMAIL_USER, to_email, msg.as_string())
+            logger.info(f"[AUTH] Email de recuperación enviado a {to_email}")
+        except Exception as e:
+            logger.warning(f"[AUTH] Error enviando email: {e}")
+    threading.Thread(target=_send, daemon=True).start()
+
+
+@router.post("/forgot-password", response_model=UnifiedResponse)
+def forgot_password(body: ForgotPasswordRequest, request: Request):
+    """Genera token de recuperación y lo envía al email. Siempre responde 200 (anti-enumeración)."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos.")
+    email = body.email.strip().lower()
+    try:
+        from core.db import get_session
+        from core.models import User
+        with get_session() as db:
+            user = db.query(User).filter(User.email == email).first()
+            if user and user.is_active:
+                token = str(uuid.uuid4())
+                expires = time.time() + 900  # 15 min
+                with _reset_lock:
+                    _reset_tokens[token] = {"username": user.username, "expires_at": expires}
+                _send_reset_email(email, user.username, token)
+    except Exception as e:
+        logger.error(f"[AUTH] Error en forgot-password: {e}")
+    return UnifiedResponse(data={"message": "Si el correo existe, recibirás un enlace de recuperación en los próximos minutos."})
+
+
+@router.post("/reset-password", response_model=UnifiedResponse)
+def reset_password(body: ResetPasswordRequest):
+    """Valida token de recuperación y actualiza la contraseña."""
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres.")
+    with _reset_lock:
+        entry = _reset_tokens.get(body.token)
+        if not entry or time.time() > entry["expires_at"]:
+            _reset_tokens.pop(body.token, None)
+            raise HTTPException(status_code=400, detail="Enlace inválido o expirado. Solicita uno nuevo.")
+        username = entry["username"]
+        del _reset_tokens[body.token]
+    try:
+        from core.db import get_session
+        from core.models import User
+        with get_session() as db:
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+            user.password_hash = _hash_password(body.new_password)
+        logger.info(f"[AUTH] Contraseña reseteada: {username}")
+        return UnifiedResponse(data={"message": "Contraseña actualizada. Ya puedes iniciar sesión."})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[AUTH] Error en reset-password: {e}")
+        raise HTTPException(status_code=500, detail="Error al actualizar contraseña.")
+
+
+@router.post("/google", response_model=UnifiedResponse)
+def google_login(body: GoogleLoginRequest, request: Request):
+    """Login con Google OAuth. Verifica ID token y emite JWT propio."""
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="Google OAuth no configurado en el servidor.")
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos.")
+    try:
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        idinfo = id_token.verify_oauth2_token(body.credential, google_requests.Request(), GOOGLE_CLIENT_ID)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token de Google inválido.")
+    email = (idinfo.get("email") or "").lower()
+    google_sub = idinfo.get("sub", "")
+    if not email or not idinfo.get("email_verified"):
+        raise HTTPException(status_code=401, detail="Email de Google no verificado.")
+    try:
+        from core.db import get_session
+        from core.models import User
+        UTC_tz = timezone.utc
+        with get_session() as db:
+            user = db.query(User).filter(User.email == email).first()
+            if user:
+                if not user.is_active:
+                    raise HTTPException(status_code=403, detail="Cuenta desactivada.")
+                if not user.is_approved:
+                    user.is_approved = True  # Google users auto-approved
+                user.last_login_at = datetime.now(UTC_tz)
+                username = user.username
+                selected_store = user.selected_store
+                selected_branch = user.selected_branch
+                role = user.role
+            else:
+                # Crear usuario nuevo desde cuenta Google
+                base = email.split("@")[0][:20].replace(".", "_").replace("-", "_")
+                username = base
+                suffix = 1
+                while db.query(User).filter(User.username == username).first():
+                    username = f"{base}{suffix}"
+                    suffix += 1
+                new_user = User(
+                    username=username,
+                    email=email,
+                    password_hash=f"google:{google_sub}",
+                    role="user",
+                    is_active=True,
+                    is_approved=True,
+                )
+                db.add(new_user)
+                selected_store = None
+                selected_branch = None
+                role = "user"
+        _start_session(username)
+        tokens = _issue_tokens(username)
+        tokens.update({"role": role, "selected_store": selected_store, "selected_branch": selected_branch, "username": username})
+        logger.info(f"[AUTH] Google login: {username} ({email})")
+        return UnifiedResponse(data=tokens)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[AUTH] Error en google-login: {e}")
+        raise HTTPException(status_code=500, detail="Error procesando login de Google.")
 
 
 @router.get("/sessions", response_model=UnifiedResponse)

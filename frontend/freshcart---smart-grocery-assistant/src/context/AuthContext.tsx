@@ -18,6 +18,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<'ok' | 'pending'>;
   logout: () => void;
+  setSession: (access_token: string, refresh_token: string, username: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType>(null!);
@@ -135,8 +136,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsername(null);
   }, []);
 
+  const setSession = useCallback((access_token: string, refresh_token: string, uname: string) => {
+    localStorage.setItem(ACCESS_KEY, access_token);
+    localStorage.setItem(REFRESH_KEY, refresh_token);
+    localStorage.setItem(USERNAME_KEY, uname);
+    setToken(access_token);
+    setUsername(uname);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ token, username, isAuthenticated: !!token, login, logout }}>
+    <AuthContext.Provider value={{ token, username, isAuthenticated: !!token, login, logout, setSession }}>
       {children}
     </AuthContext.Provider>
   );

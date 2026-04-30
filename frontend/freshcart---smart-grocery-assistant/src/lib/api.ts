@@ -176,6 +176,42 @@ export async function listUsers(): Promise<{ users: any[]; total: number }> {
   return json.data;
 }
 
+export async function googleLogin(credential: string): Promise<{
+  access_token: string; refresh_token: string; token_type: string;
+  expires_in: number; role?: string; selected_store?: string; selected_branch?: string; username: string;
+}> {
+  const resp = await _rawFetch(`${API_BASE_URL}/auth/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential }),
+  });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || json.detail || 'Google login fallido');
+  return json.data;
+}
+
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const resp = await _rawFetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || json.detail || 'Error al solicitar recuperación');
+  return json.data;
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  const resp = await _rawFetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || json.detail || 'Error al restablecer contraseña');
+  return json.data;
+}
+
 // ── Productos ──────────────────────────────────────────────────────────────────
 
 export async function searchProducts(

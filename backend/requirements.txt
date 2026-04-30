@@ -40,6 +40,9 @@ openai>=1.0.0            # OpenRouter (API OpenAI-compatible) — modelos gratui
 groq>=1.1.0              # Groq LPU: respuesta <1s, tier gratuito (fallback)
 huggingface_hub>=0.26.0  # HuggingFace Inference API (fallback)
 
+# Google OAuth — verificación de ID tokens para login con Google
+google-auth>=2.0.0
+
 # Discord bot
 discord.py>=2.3.0
 
