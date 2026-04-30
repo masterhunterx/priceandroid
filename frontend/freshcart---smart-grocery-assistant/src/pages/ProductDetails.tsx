@@ -521,12 +521,14 @@ const ProductDetails: React.FC = () => {
                                 pricePoint.offer_type === 'card' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
                                 pricePoint.offer_type === 'internet' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400' :
                                 pricePoint.offer_type === 'app' ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400' :
+                                pricePoint.offer_type === 'liquidacion' ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400' :
                                 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
                               }`}>
                                 <span className="material-symbols-outlined" style={{fontSize:'11px'}}>
                                   {pricePoint.offer_type === 'card' ? 'credit_card' :
                                    pricePoint.offer_type === 'internet' ? 'public' :
-                                   pricePoint.offer_type === 'app' ? 'smartphone' : 'local_offer'}
+                                   pricePoint.offer_type === 'app' ? 'smartphone' :
+                                   pricePoint.offer_type === 'liquidacion' ? 'sell' : 'local_offer'}
                                 </span>
                                 {pricePoint.card_label || pricePoint.promo_description}
                               </span>

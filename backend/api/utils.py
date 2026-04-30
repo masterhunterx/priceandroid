@@ -63,6 +63,9 @@ def analyze_promo(promo_description: str) -> Dict[str, Any]:
         elif "app" in lower:
             res["label"] = "Exclusivo App"
             res["offer_type"] = "app"
+        elif "liquidaci" in lower or "exclusiv" in lower:
+            res["label"] = "Liquidación Exclusiva"
+            res["offer_type"] = "liquidacion"
 
     # Detección de ofertas multi-unidad (ej. '3 por 2000' o '2 x $1.500')
     multi_match = re.search(r'(\d+)\s*(?:x|por)\s*\$?([\d\.]+)', lower)

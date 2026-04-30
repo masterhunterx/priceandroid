@@ -181,14 +181,22 @@ def normalize_product(raw_product):
     item = items[0]  # Primary SKU
     promotions = item.get("promotions", [])
 
-    # Determine the best promotional price
+    # Determine the best promotional price.
+    # Prefer promos available to all users (paymentMethods="ALL") over member-only ones.
     best_promo_price = None
     promo_description = None
     for promo in promotions:
         up = promo.get("unitPrice")
-        if up and (best_promo_price is None or up < best_promo_price):
+        if not up:
+            continue
+        payment = (promo.get("paymentMethods") or "").upper()
+        user_props = (promo.get("userProperties") or "").upper()
+        is_exclusive = payment not in ("ALL", "") or user_props not in ("ALL", "")
+        desc = promo.get("description", "")
+        # Prefer a non-exclusive lower promo; always take if no promo captured yet
+        if best_promo_price is None or up < best_promo_price:
             best_promo_price = up
-            promo_description = promo.get("description", "")
+            promo_description = ("LIQUIDACIÓN EXCLUSIVA" if is_exclusive else desc)
 
     # Build clean category path
     category_names = raw_product.get("categoryNames", [])
