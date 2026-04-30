@@ -342,7 +342,9 @@ const Login: React.FC = () => {
   }
 
   // ── Vista principal: login / register ──────────────────────────────────────
-  const hasGoogle = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  // Google GSI no funciona en WebView (Capacitor/Android) — Google lo bloquea explícitamente
+  const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+  const hasGoogle = !!import.meta.env.VITE_GOOGLE_CLIENT_ID && !isNative;
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex flex-col items-center justify-center px-6">
