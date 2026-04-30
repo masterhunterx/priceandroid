@@ -109,6 +109,73 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   return resp;
 }
 
+// ── Auth ───────────────────────────────────────────────────────────────────────
+
+export async function loginUser(username: string, password: string): Promise<{
+  access_token: string; refresh_token: string; token_type: string;
+  expires_in: number; role?: string; selected_store?: string; selected_branch?: string;
+}> {
+  const resp = await _rawFetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': API_KEY },
+    body: JSON.stringify({ username, password }),
+  });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || json.detail || 'Login fallido');
+  return json.data;
+}
+
+export async function registerUser(username: string, password: string, email?: string): Promise<{ message: string }> {
+  const resp = await _rawFetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': API_KEY },
+    body: JSON.stringify({ username, password, email }),
+  });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || json.detail || 'Registro fallido');
+  return json.data;
+}
+
+export async function getMe(): Promise<{
+  username: string; role: string; email?: string;
+  selected_store?: string; selected_branch?: string;
+  created_at?: string; last_login_at?: string;
+}> {
+  const resp = await fetchWithAuth(`${API_BASE_URL}/auth/me`, { headers: getHeaders() });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || 'Error obteniendo perfil');
+  return json.data;
+}
+
+export async function updateProfile(data: {
+  selected_store?: string; selected_branch?: string; email?: string;
+}): Promise<void> {
+  const resp = await fetchWithAuth(`${API_BASE_URL}/auth/profile`, {
+    method: 'PATCH',
+    headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || 'Error actualizando perfil');
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const resp = await fetchWithAuth(`${API_BASE_URL}/auth/change-password`, {
+    method: 'POST',
+    headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || 'Error cambiando contraseña');
+}
+
+export async function listUsers(): Promise<{ users: any[]; total: number }> {
+  const resp = await fetchWithAuth(`${API_BASE_URL}/auth/users`, { headers: getHeaders() });
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || 'Error listando usuarios');
+  return json.data;
+}
+
 // ── Productos ──────────────────────────────────────────────────────────────────
 
 export async function searchProducts(

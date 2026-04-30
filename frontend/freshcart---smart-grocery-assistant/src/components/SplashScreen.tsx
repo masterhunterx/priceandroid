@@ -1,25 +1,39 @@
 import React, { useState, useEffect } from 'react';
 
+const STORE_COLORS: Record<string, string> = {
+  jumbo:        '#00a650',
+  santa_isabel: '#e30613',
+  lider:        '#0071ce',
+  unimarc:      '#da291c',
+};
+
+const DEFAULT_COLOR = '#16a34a';
+
+const MESSAGES = [
+  'Buscando las mejores ofertas...',
+  'Comparando precios entre tiendas...',
+  'Revisando descuentos de hoy...',
+  'Preparando tu canasta...',
+  '¡Listo para ahorrar!',
+];
+
 const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState('Iniciando FluxEngine...');
+  const [msgIndex, setMsgIndex] = useState(0);
 
-  const messages = [
-    'Iniciando FluxEngine v4.0...',
-    'Ejecutando Doble Check de Ubicaciones...',
-    'Auditando 346 Comunas de Chile...',
-    'Sincronizando Precios Nacionales...',
-    'Verificando Inventarios 2026...',
-    'Optimizando Canastas de Ahorro...',
-    'Geolocalización Verificada al 100%',
-    'Bienvenido a FreshCart'
-  ];
+  const isDark = document.documentElement.classList.contains('dark');
+  const savedStore = localStorage.getItem('selected_store') ?? '';
+  const accentColor = STORE_COLORS[savedStore] ?? DEFAULT_COLOR;
+
+  const bg    = isDark ? '#0a0a0a' : '#ffffff';
+  const text  = isDark ? '#ffffff' : '#111111';
+  const sub   = isDark ? '#9ca3af' : '#6b7280';
+  const track = isDark ? '#1f2937' : '#f3f4f6';
 
   useEffect(() => {
-    const duration = 2800; // 2.8 seconds
+    const duration = 2800;
     const interval = 30;
-    const steps = duration / interval;
-    const increment = 100 / steps;
+    const increment = 100 / (duration / interval);
 
     const timer = setInterval(() => {
       setProgress(prev => {
@@ -33,62 +47,66 @@ const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
       });
     }, interval);
 
-    // Rotate messages
-    const messageInterval = setInterval(() => {
-      setMessage(prev => {
-        const currentIndex = messages.indexOf(prev);
-        return messages[(currentIndex + 1) % messages.length];
-      });
-    }, 500);
+    const msgTimer = setInterval(() => {
+      setMsgIndex(prev => (prev + 1) % MESSAGES.length);
+    }, 560);
 
-    return () => {
-      clearInterval(timer);
-      clearInterval(messageInterval);
-    };
+    return () => { clearInterval(timer); clearInterval(msgTimer); };
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-background-dark flex flex-col items-center justify-center p-8 animate-in fade-in duration-500">
-      <div className="relative mb-12">
-        <div className="size-24 rounded-3xl bg-primary/20 flex items-center justify-center p-4 ring-2 ring-primary/40 animate-pulse">
-          <span className="material-symbols-outlined text-primary text-[64px] animate-spin-slow">cyclone</span>
+    <div
+      className="fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8"
+      style={{ background: bg }}
+    >
+      {/* Ícono */}
+      <div className="mb-10 flex flex-col items-center gap-5">
+        <div
+          className="size-24 rounded-[28px] flex items-center justify-center shadow-lg"
+          style={{ background: accentColor }}
+        >
+          <span
+            className="material-symbols-outlined text-white"
+            style={{ fontSize: 52, fontVariationSettings: "'FILL' 1" }}
+          >
+            shopping_basket
+          </span>
         </div>
-        <div className="absolute -top-3 -right-3 bg-primary text-background-dark font-black text-[12px] px-3 py-1.5 rounded-xl shadow-xl shadow-primary/40">
-          FluxEngine v4.0
+
+        <div className="text-center">
+          <h1 className="text-3xl font-black tracking-tight" style={{ color: text }}>
+            FreshCart
+          </h1>
+          <p className="text-sm font-medium mt-1" style={{ color: sub }}>
+            Compara precios, ahorra más
+          </p>
         </div>
       </div>
 
-      <div className="w-full max-w-xs space-y-4">
-        <div className="flex justify-between items-end">
-          <div className="space-y-1">
-            <h1 className="text-white text-2xl font-black tracking-tighter uppercase italic">FreshCart</h1>
-            <p className="text-primary text-[10px] font-bold uppercase tracking-[0.2em]">{message}</p>
-          </div>
-          <span className="text-white font-black text-xl italic">{Math.round(progress)}%</span>
-        </div>
-
-        <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700 p-0.5">
-          <div 
-            className="h-full bg-gradient-to-r from-primary via-emerald-400 to-primary rounded-full transition-all duration-100 ease-out shadow-[0_0_15px_rgba(34,197,94,0.5)]"
-            style={{ width: `${progress}%` }}
+      {/* Progreso */}
+      <div className="w-full max-w-[260px] space-y-3">
+        <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: track }}>
+          <div
+            className="h-full rounded-full transition-all duration-100 ease-out"
+            style={{ width: `${progress}%`, background: accentColor }}
           />
         </div>
-        
-        <div className="flex justify-center gap-1.5 opacity-50 mt-4">
-          {[0, 1, 2].map(i => (
-            <div 
-              key={i} 
-              className={`w-1 h-1 rounded-full bg-primary animate-bounce`}
-              style={{ animationDelay: `${i * 0.15}s` }}
-            />
-          ))}
+
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium" style={{ color: sub }}>
+            {MESSAGES[msgIndex]}
+          </p>
+          <span className="text-xs font-bold tabular-nums" style={{ color: text }}>
+            {Math.round(progress)}%
+          </span>
         </div>
       </div>
-      
-      <div className="absolute bottom-12 text-slate-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-        <span className="w-8 h-px bg-slate-800"></span>
-        DeepMind Agent Intelligence
-        <span className="w-8 h-px bg-slate-800"></span>
+
+      {/* Tiendas */}
+      <div className="absolute bottom-10">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-center" style={{ color: sub }}>
+          Jumbo · Lider · Santa Isabel · Unimarc
+        </p>
       </div>
     </div>
   );

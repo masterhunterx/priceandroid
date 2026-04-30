@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from jwt.exceptions import InvalidTokenError
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from ..schemas import UnifiedResponse
 
 # H1 — Pre-computar hash dummy para normalizar timing en usuarios inexistentes.
@@ -311,10 +311,55 @@ def _issue_tokens(username: str) -> dict:
         "expires_in":    int(access_exp.total_seconds()),
     }
 
+# ── DB helpers ─────────────────────────────────────────────────────────────────
+def _get_user_from_db(username: str):
+    """Busca usuario en BD. Retorna el objeto User o None."""
+    try:
+        from core.db import get_session
+        from core.models import User
+        with get_session() as db:
+            return db.query(User).filter(User.username == username.lower()).first()
+    except Exception as e:
+        logger.warning(f"[AUTH] Error consultando BD: {e}")
+        return None
+
+def _hash_password(plain: str) -> str:
+    if _BCRYPT_AVAILABLE:
+        import bcrypt
+        return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=12)).decode()
+    import hashlib, secrets
+    salt = secrets.token_hex(16)
+    return f"sha256:{salt}:{hashlib.sha256((salt + plain).encode()).hexdigest()}"
+
+def _update_last_login(username: str) -> None:
+    try:
+        from core.db import get_session
+        from core.models import User
+        with get_session() as db:
+            user = db.query(User).filter(User.username == username.lower()).first()
+            if user:
+                user.last_login_at = datetime.now(UTC)
+    except Exception as e:
+        logger.warning(f"[AUTH] No se pudo actualizar last_login: {e}")
+
 # ── Schemas ────────────────────────────────────────────────────────────────────
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    email: str | None = None
+
+class ProfileUpdateRequest(BaseModel):
+    selected_store: str | None = None
+    selected_branch: str | None = None
+    email: str | None = None
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 @router.post("/login")
@@ -332,12 +377,22 @@ def login(body: LoginRequest, request: Request):
 
     username = body.username.strip().lower()
 
-    # 1. Whitelist + credenciales — mensaje idéntico para evitar enumeración de usuarios.
-    # H1 — Timing normalization: para usuarios inexistentes ejecutamos un dummy bcrypt
-    # (sin esto, la ausencia del hash tarda <1ms vs ~100ms con bcrypt, permitiendo
-    # distinguir "usuario no existe" de "contraseña incorrecta" por latencia).
-    stored_pw = ALLOWED_USERS.get(username, "")
-    user_exists = bool(stored_pw)
+    # 1. Buscar usuario: primero en BD, luego fallback a whitelist en memoria.
+    # H1 — Timing normalization: siempre ejecutamos _check_password (o dummy bcrypt)
+    # para evitar enumeración por timing side-channel.
+    db_user = _get_user_from_db(username)
+    stored_pw = ""
+    user_exists = False
+    is_db_user = False
+
+    if db_user:
+        stored_pw = db_user.password_hash
+        user_exists = True
+        is_db_user = True
+    elif username in ALLOWED_USERS:
+        stored_pw = ALLOWED_USERS[username]
+        user_exists = True
+
     if not user_exists and _BCRYPT_AVAILABLE:
         _bcrypt.checkpw(body.password.encode(), _DUMMY_HASH)  # normaliza latencia
     credentials_ok = user_exists and _check_password(body.password, stored_pw)
@@ -360,14 +415,28 @@ def login(body: LoginRequest, request: Request):
         logger.warning(f"[AUTH] Credenciales inválidas para: '{username}' desde {client_ip}")
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
 
-    # 3. Admin → token directo
+    # 2. Usuario en BD: verificar activo y aprobado
+    if is_db_user:
+        if not db_user.is_active:
+            raise HTTPException(status_code=403, detail="Cuenta desactivada.")
+        if not db_user.is_approved and db_user.role != "admin":
+            raise HTTPException(status_code=202, detail="Cuenta pendiente de aprobación.")
+        _update_last_login(username)
+        _start_session(username)
+        logger.info(f"[AUTH] Login BD: {username} (role={db_user.role})")
+        tokens = _issue_tokens(username)
+        tokens["role"] = db_user.role
+        tokens["selected_store"] = db_user.selected_store
+        tokens["selected_branch"] = db_user.selected_branch
+        return JSONResponse(content={"success": True, "data": tokens})
+
+    # 3. Admin desde env → token directo
     if username == ADMIN_USERNAME.lower():
         _start_session(username)
-        logger.info(f"[AUTH] Login admin: {username}")
+        logger.info(f"[AUTH] Login admin (env): {username}")
         return JSONResponse(content={"success": True, "data": _issue_tokens(username)})
 
     # 4. Test user → flujo de aprobación
-    # Si ya fue aprobado antes en esta sesión del servidor, acceso directo
     if username in _approved_users:
         _start_session(username)
         logger.info(f"[AUTH] Login directo (ya aprobado): {username}")
@@ -493,9 +562,208 @@ def get_me(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     payload = _decode_token(credentials.credentials)
     if payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Se requiere un access token.")
+    if _is_token_revoked(payload):
+        raise HTTPException(status_code=401, detail="Token revocado.")
     username = payload.get("sub")
     _touch_session(username)
-    return UnifiedResponse(data={"username": username, "authenticated": True})
+
+    profile: dict = {"username": username, "authenticated": True, "role": "user"}
+    db_user = _get_user_from_db(username)
+    if db_user:
+        profile.update({
+            "role":            db_user.role,
+            "email":           db_user.email,
+            "selected_store":  db_user.selected_store,
+            "selected_branch": db_user.selected_branch,
+            "created_at":      db_user.created_at.isoformat() if db_user.created_at else None,
+            "last_login_at":   db_user.last_login_at.isoformat() if db_user.last_login_at else None,
+        })
+    elif username == ADMIN_USERNAME.lower():
+        profile["role"] = "admin"
+
+    return UnifiedResponse(data=profile)
+
+
+@router.patch("/profile", response_model=UnifiedResponse)
+def update_profile(body: ProfileUpdateRequest,
+                   credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    """Actualiza preferencias del usuario (tienda, sucursal, email)."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Token requerido.")
+    payload = _decode_token(credentials.credentials)
+    if _is_token_revoked(payload):
+        raise HTTPException(status_code=401, detail="Token revocado.")
+    username = payload.get("sub")
+
+    try:
+        from core.db import get_session
+        from core.models import User
+        with get_session() as db:
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado en BD.")
+            if body.selected_store is not None:
+                user.selected_store = body.selected_store
+            if body.selected_branch is not None:
+                user.selected_branch = body.selected_branch
+            if body.email is not None:
+                user.email = body.email
+        _touch_session(username)
+        return UnifiedResponse(data={"message": "Perfil actualizado."})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[AUTH] Error actualizando perfil de {username}: {e}")
+        raise HTTPException(status_code=500, detail="Error al actualizar perfil.")
+
+
+@router.post("/register", response_model=UnifiedResponse)
+def register(body: RegisterRequest, request: Request):
+    """Registra un nuevo usuario. Requiere aprobación de admin antes de poder ingresar."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos.")
+
+    username = body.username.strip().lower()
+    if len(username) < 3 or len(username) > 30:
+        raise HTTPException(status_code=400, detail="Username debe tener entre 3 y 30 caracteres.")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres.")
+
+    try:
+        from core.db import get_session
+        from core.models import User
+        from sqlalchemy.exc import IntegrityError
+        with get_session() as db:
+            if db.query(User).filter(User.username == username).first():
+                raise HTTPException(status_code=409, detail="El usuario ya existe.")
+            new_user = User(
+                username=username,
+                email=body.email,
+                password_hash=_hash_password(body.password),
+                role="user",
+                is_active=True,
+                is_approved=False,
+            )
+            db.add(new_user)
+
+        one_time_token = str(uuid.uuid4())
+        approve_url = f"{BACKEND_URL}/api/auth/approve/{username}?token={one_time_token}"
+        with _approvals_lock:
+            _pending_approvals[username] = {
+                "approved": False,
+                "requested_at": time.time(),
+                "ip": client_ip,
+                "token": one_time_token,
+            }
+        _send_discord(
+            f"🆕 **Nuevo registro — FreshCart**\n"
+            f"👤 Usuario: `{username}` · 📧 `{body.email or 'sin email'}` · 🌐 `{client_ip}`\n"
+            f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"✅ **Aprobar acceso:**\n{approve_url}"
+        )
+        logger.info(f"[AUTH] Nuevo registro: {username} desde {client_ip}")
+        return UnifiedResponse(data={"message": "Registro exitoso. Esperando aprobación del administrador."})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[AUTH] Error en registro: {e}")
+        raise HTTPException(status_code=500, detail="Error al registrar usuario.")
+
+
+@router.post("/change-password", response_model=UnifiedResponse)
+def change_password(body: ChangePasswordRequest,
+                    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    """Cambia la contraseña del usuario autenticado."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Token requerido.")
+    payload = _decode_token(credentials.credentials)
+    if _is_token_revoked(payload):
+        raise HTTPException(status_code=401, detail="Token revocado.")
+    username = payload.get("sub")
+
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 8 caracteres.")
+
+    try:
+        from core.db import get_session
+        from core.models import User
+        with get_session() as db:
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+            if not _check_password(body.current_password, user.password_hash):
+                raise HTTPException(status_code=401, detail="Contraseña actual incorrecta.")
+            user.password_hash = _hash_password(body.new_password)
+        logger.info(f"[AUTH] Cambio de contraseña: {username}")
+        return UnifiedResponse(data={"message": "Contraseña actualizada correctamente."})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[AUTH] Error cambiando contraseña: {e}")
+        raise HTTPException(status_code=500, detail="Error al cambiar contraseña.")
+
+
+@router.get("/users", response_model=UnifiedResponse)
+def list_users(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    """Lista todos los usuarios registrados (solo admin)."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Token requerido.")
+    payload = _decode_token(credentials.credentials)
+    if payload.get("sub", "").lower() != ADMIN_USERNAME.lower():
+        raise HTTPException(status_code=403, detail="Solo el admin puede listar usuarios.")
+
+    try:
+        from core.db import get_session
+        from core.models import User
+        with get_session() as db:
+            users = db.query(User).order_by(User.created_at.desc()).all()
+            return UnifiedResponse(data={
+                "users": [
+                    {
+                        "id":             u.id,
+                        "username":       u.username,
+                        "email":          u.email,
+                        "role":           u.role,
+                        "is_active":      u.is_active,
+                        "is_approved":    u.is_approved,
+                        "selected_store": u.selected_store,
+                        "created_at":     u.created_at.isoformat() if u.created_at else None,
+                        "last_login_at":  u.last_login_at.isoformat() if u.last_login_at else None,
+                    }
+                    for u in users
+                ],
+                "total": len(users),
+            })
+    except Exception as e:
+        logger.error(f"[AUTH] Error listando usuarios: {e}")
+        raise HTTPException(status_code=500, detail="Error al listar usuarios.")
+
+
+@router.patch("/users/{username}/approve", response_model=UnifiedResponse)
+def approve_user_db(username: str,
+                    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    """Aprueba o desactiva un usuario en la BD (solo admin)."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Token requerido.")
+    payload = _decode_token(credentials.credentials)
+    if payload.get("sub", "").lower() != ADMIN_USERNAME.lower():
+        raise HTTPException(status_code=403, detail="Solo el admin puede aprobar usuarios.")
+
+    try:
+        from core.db import get_session
+        from core.models import User
+        with get_session() as db:
+            user = db.query(User).filter(User.username == username.lower()).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+            user.is_approved = True
+            _approved_users.add(username.lower())
+        return UnifiedResponse(data={"message": f"Usuario '{username}' aprobado."})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al aprobar usuario.")
 
 
 @router.get("/sessions", response_model=UnifiedResponse)

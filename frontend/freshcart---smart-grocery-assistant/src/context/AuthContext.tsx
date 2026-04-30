@@ -107,13 +107,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(json.detail || json.error || 'Credenciales incorrectas');
     }
 
-    const { access_token, refresh_token } = json.data;
+    const { access_token, refresh_token, selected_store, selected_branch } = json.data;
     localStorage.setItem(ACCESS_KEY, access_token);
     localStorage.setItem(REFRESH_KEY, refresh_token);
     setToken(access_token);
     const uname = json.data.username || _decodeUsername(access_token);
     setUsername(uname);
     if (uname) localStorage.setItem(USERNAME_KEY, uname);
+
+    // Restaurar tienda y sucursal guardadas en el servidor
+    if (selected_store) {
+      localStorage.setItem('selected_store', selected_store);
+      window.dispatchEvent(new CustomEvent('freshcart:store_restored', { detail: { store: selected_store, branch: selected_branch } }));
+    }
+    if (selected_branch) {
+      try { localStorage.setItem('selected_branches', selected_branch); } catch {}
+    }
+
     return 'ok';
   }, []);
 

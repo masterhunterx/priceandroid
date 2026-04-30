@@ -491,3 +491,30 @@ class IdeaAdmin(Base):
 
     def __repr__(self):
         return f"<IdeaAdmin(id={self.id}, status='{self.status}')>"
+
+
+class User(Base):
+    """
+    Usuarios registrados en la plataforma.
+    Reemplaza el sistema de whitelist en memoria de auth.py.
+    """
+    __tablename__ = "users"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    username        = Column(String(50), unique=True, nullable=False, index=True)
+    email           = Column(String(200), unique=True, nullable=True, index=True)
+    password_hash   = Column(String(200), nullable=False)
+    role            = Column(String(20), default="user", nullable=False)  # "admin" | "user"
+    is_active       = Column(Boolean, default=True, nullable=False)
+    is_approved     = Column(Boolean, default=False, nullable=False)  # admin debe aprobar
+
+    # Preferencias persistidas
+    selected_store  = Column(String(50), nullable=True)   # "jumbo" | "lider" | ...
+    selected_branch = Column(String(200), nullable=True)  # JSON: {store_slug: branch_id}
+
+    created_at      = Column(DateTime, default=lambda: datetime.now(UTC))
+    last_login_at   = Column(DateTime, nullable=True)
+    updated_at      = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    def __repr__(self):
+        return f"<User(username='{self.username}', role='{self.role}', approved={self.is_approved})>"

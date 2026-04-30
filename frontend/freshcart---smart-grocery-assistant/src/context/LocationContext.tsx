@@ -107,6 +107,12 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (slug) localStorage.setItem('selected_store', slug);
     else localStorage.removeItem('selected_store');
     applyStoreTheme(slug);
+    // Persistir en servidor si hay sesión activa
+    if (slug) {
+      import('../lib/api').then(({ updateProfile }) => {
+        updateProfile({ selected_store: slug }).catch(() => {});
+      });
+    }
   };
 
   const [loading, setLoading] = useState(false);
@@ -129,8 +135,19 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
         applyStoreTheme(e.newValue);
       }
     };
+    const handleStoreRestored = (e: Event) => {
+      const { store } = (e as CustomEvent).detail;
+      if (store) {
+        setSelectedStoreState(store);
+        applyStoreTheme(store);
+      }
+    };
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('freshcart:store_restored', handleStoreRestored);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('freshcart:store_restored', handleStoreRestored);
+    };
   }, []);
   
   const updateLocation = async (lat: number, lng: number, name?: string) => {
