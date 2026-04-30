@@ -325,7 +325,10 @@ def _get_user_from_db(username: str):
         from core.db import get_session
         from core.models import User
         with get_session() as db:
-            return db.query(User).filter(User.username == username.lower()).first()
+            user = db.query(User).filter(User.username == username.lower()).first()
+            if user:
+                db.expunge(user)
+            return user
     except Exception as e:
         logger.warning(f"[AUTH] Error consultando BD: {e}")
         return None
