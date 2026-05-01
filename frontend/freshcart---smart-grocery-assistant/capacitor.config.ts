@@ -5,10 +5,14 @@ const config: CapacitorConfig = {
   appName: 'FreshCart',
   webDir: 'dist',
   server: {
-    // En desarrollo local puedes poner tu IP: 'http://192.168.1.X:8000'
-    // En producción apunta a tu servidor real.
-    // Si está vacío, la app sirve los archivos de dist/ sin servidor externo.
     androidScheme: 'https',
+  },
+  plugins: {
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      serverClientId: '145660625437-vutld3gc335dr9jkohsgjgstmkd2msv8.apps.googleusercontent.com',
+      forceCodeForRefreshToken: true,
+    },
   },
 };
 

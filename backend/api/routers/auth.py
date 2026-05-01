@@ -878,7 +878,21 @@ def google_login(body: GoogleLoginRequest, request: Request):
     try:
         from google.oauth2 import id_token
         from google.auth.transport import requests as google_requests
-        idinfo = id_token.verify_oauth2_token(body.credential, google_requests.Request(), GOOGLE_CLIENT_ID)
+        # Acepta tokens del cliente web original y del cliente Firebase (móvil nativo)
+        _firebase_web_client = os.getenv("FIREBASE_WEB_CLIENT_ID", "")
+        _client_ids = [cid for cid in [GOOGLE_CLIENT_ID, _firebase_web_client] if cid]
+        idinfo = None
+        last_exc = None
+        for cid in _client_ids:
+            try:
+                idinfo = id_token.verify_oauth2_token(body.credential, google_requests.Request(), cid)
+                break
+            except Exception as e:
+                last_exc = e
+        if idinfo is None:
+            raise last_exc
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=401, detail="Token de Google inválido.")
     email = (idinfo.get("email") or "").lower()

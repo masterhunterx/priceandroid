@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { registerUser, googleLogin, firebaseLogin, forgotPassword, resetPassword } from '../lib/api';
-import '../lib/firebase'; // inicializa Firebase app (solo si VITE_FIREBASE_API_KEY está configurado)
+import { registerUser, googleLogin, forgotPassword, resetPassword } from '../lib/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -71,12 +70,11 @@ const Login: React.FC = () => {
     setGoogleLoading(true);
     setLoginError('');
     try {
-      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-      const result = await FirebaseAuthentication.signInWithGoogle();
-      const idTokenResult = await FirebaseAuthentication.getIdToken();
-      const firebaseToken = idTokenResult.token;
-      if (!firebaseToken) throw new Error('No se obtuvo token de Firebase');
-      const data = await firebaseLogin(firebaseToken);
+      const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+      const result = await GoogleAuth.signIn();
+      const idToken = result?.authentication?.idToken;
+      if (!idToken) throw new Error('No se obtuvo token de Google');
+      const data = await googleLogin(idToken);
       setSession(data.access_token, data.refresh_token, data.username);
       if (data.selected_store) {
         localStorage.setItem('selected_store', data.selected_store);
@@ -373,9 +371,9 @@ const Login: React.FC = () => {
 
   // ── Vista principal: login / register ──────────────────────────────────────
   const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
-  // En web: botón GSI (requiere VITE_GOOGLE_CLIENT_ID). En nativo: botón Firebase (requiere VITE_FIREBASE_API_KEY).
+  // En web: botón GSI. En nativo Android: botón Firebase (google-services.json lo configura).
   const hasWebGoogle = !!import.meta.env.VITE_GOOGLE_CLIENT_ID && !isNative;
-  const hasNativeGoogle = !!import.meta.env.VITE_FIREBASE_API_KEY && isNative;
+  const hasNativeGoogle = isNative;
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex flex-col items-center justify-center px-6">
