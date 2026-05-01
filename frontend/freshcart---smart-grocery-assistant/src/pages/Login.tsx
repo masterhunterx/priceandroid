@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { registerUser, googleLogin, forgotPassword, resetPassword } from '../lib/api';
+import { registerUser, googleLogin, firebaseLogin, forgotPassword, resetPassword } from '../lib/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
