@@ -70,11 +70,11 @@ const Login: React.FC = () => {
     setGoogleLoading(true);
     setLoginError('');
     try {
-      const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-      const result = await GoogleAuth.signIn();
-      const idToken = result?.authentication?.idToken;
-      if (!idToken) throw new Error('No se obtuvo token de Google');
-      const data = await googleLogin(idToken);
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      await FirebaseAuthentication.signInWithGoogle();
+      const { token } = await FirebaseAuthentication.getIdToken();
+      if (!token) throw new Error('No se obtuvo token de Firebase');
+      const data = await firebaseLogin(token);
       setSession(data.access_token, data.refresh_token, data.username);
       if (data.selected_store) {
         localStorage.setItem('selected_store', data.selected_store);
