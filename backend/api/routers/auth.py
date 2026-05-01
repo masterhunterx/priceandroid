@@ -933,6 +933,120 @@ def google_login(body: GoogleLoginRequest, request: Request):
         raise HTTPException(status_code=500, detail="Error procesando login de Google.")
 
 
+class FirebaseLoginRequest(BaseModel):
+    id_token: str
+
+_FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
+_FIREBASE_JWK_URL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
+_firebase_jwk_cache: dict = {"keys": {}, "fetched_at": 0}
+_firebase_jwk_lock = Lock()
+
+def _get_firebase_public_keys() -> dict:
+    """Retorna {kid: jwk_dict}. Cache de 30 min."""
+    now = time.time()
+    with _firebase_jwk_lock:
+        if now - _firebase_jwk_cache["fetched_at"] < 1800 and _firebase_jwk_cache["keys"]:
+            return _firebase_jwk_cache["keys"]
+    import requests as _req
+    resp = _req.get(_FIREBASE_JWK_URL, timeout=10)
+    resp.raise_for_status()
+    keys = {k["kid"]: k for k in resp.json().get("keys", [])}
+    with _firebase_jwk_lock:
+        _firebase_jwk_cache["keys"] = keys
+        _firebase_jwk_cache["fetched_at"] = now
+    return keys
+
+def _verify_firebase_token(id_token: str) -> dict:
+    """Verifica Firebase ID token sin service account usando las claves JWK públicas de Google."""
+    if not _FIREBASE_PROJECT_ID:
+        raise HTTPException(status_code=503, detail="Firebase no configurado en el servidor.")
+    import jwt as _jwt
+    from jwt.algorithms import RSAAlgorithm
+    try:
+        keys = _get_firebase_public_keys()
+        header = _jwt.get_unverified_header(id_token)
+        kid = header.get("kid", "")
+        if kid not in keys:
+            raise HTTPException(status_code=401, detail="Token Firebase inválido.")
+        public_key = RSAAlgorithm.from_jwk(keys[kid])
+        payload = _jwt.decode(
+            id_token,
+            public_key,
+            algorithms=["RS256"],
+            audience=_FIREBASE_PROJECT_ID,
+            issuer=f"https://securetoken.google.com/{_FIREBASE_PROJECT_ID}",
+        )
+        return payload
+    except HTTPException:
+        raise
+    except _jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token Firebase expirado.")
+    except Exception as e:
+        logger.warning(f"[AUTH] Firebase token inválido: {e}")
+        raise HTTPException(status_code=401, detail="Token Firebase inválido.")
+
+
+@router.post("/firebase", response_model=UnifiedResponse)
+def firebase_login(body: FirebaseLoginRequest, request: Request):
+    """Login con Firebase (Google Sign-In nativo en Android). Verifica Firebase ID token."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos.")
+
+    payload = _verify_firebase_token(body.id_token)
+    email = (payload.get("email") or "").lower()
+    if not email or not payload.get("email_verified"):
+        raise HTTPException(status_code=401, detail="Email de Firebase no verificado.")
+
+    firebase_uid = payload.get("uid") or payload.get("sub", "")
+
+    try:
+        from core.db import get_session
+        from core.models import User
+        UTC_tz = timezone.utc
+        with get_session() as db:
+            user = db.query(User).filter(User.email == email).first()
+            if user:
+                if not user.is_active:
+                    raise HTTPException(status_code=403, detail="Cuenta desactivada.")
+                if not user.is_approved:
+                    user.is_approved = True
+                user.last_login_at = datetime.now(UTC_tz)
+                username = user.username
+                selected_store = user.selected_store
+                selected_branch = user.selected_branch
+                role = user.role
+            else:
+                base = email.split("@")[0][:20].replace(".", "_").replace("-", "_")
+                username = base
+                suffix = 1
+                while db.query(User).filter(User.username == username).first():
+                    username = f"{base}{suffix}"
+                    suffix += 1
+                new_user = User(
+                    username=username,
+                    email=email,
+                    password_hash=f"firebase:{firebase_uid}",
+                    role="user",
+                    is_active=True,
+                    is_approved=True,
+                )
+                db.add(new_user)
+                selected_store = None
+                selected_branch = None
+                role = "user"
+        _start_session(username)
+        tokens = _issue_tokens(username)
+        tokens.update({"role": role, "selected_store": selected_store, "selected_branch": selected_branch, "username": username})
+        logger.info(f"[AUTH] Firebase login: {username} ({email})")
+        return UnifiedResponse(data=tokens)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[AUTH] Error en firebase-login: {e}")
+        raise HTTPException(status_code=500, detail="Error procesando login de Firebase.")
+
+
 @router.get("/sessions", response_model=UnifiedResponse)
 def get_active_sessions(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     """Lista sesiones activas (solo admin)."""
