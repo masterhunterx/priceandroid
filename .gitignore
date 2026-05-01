@@ -15,7 +15,9 @@ build/
 .env
 *.env.bak
 *.env.backup
+*.env.test
 backend/.env
+backend/.env.test
 frontend/**/.env
 frontend/**/.env.local
 frontend/**/.env.production
