@@ -183,7 +183,7 @@ const SearchResults: React.FC = () => {
     if (value.length >= 2) {
       suggestTimer.current = setTimeout(async () => {
         try {
-          const data = await getSearchSuggestions(value);
+          const data = await getSearchSuggestions(value, store || undefined);
           setSuggestions(data);
           setShowSuggestions(data.length > 0);
         } catch {

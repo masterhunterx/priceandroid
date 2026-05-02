@@ -27,6 +27,7 @@ _CARD_KEYWORDS = {
     "tarjeta lider": "Tarjeta Lider BCI",
     "club lider": "Tarjeta Lider BCI",
     "lider bci": "Tarjeta Lider BCI",
+    "precio lider": "Tarjeta Lider BCI",
     "tarjeta santa isabel": "Tarjeta Santa Isabel",
 }
 

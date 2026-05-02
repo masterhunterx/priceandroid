@@ -392,9 +392,11 @@ export async function getDealsMenu(persons: number = 2): Promise<any> {
 
 // ── Sugerencias y tendencias ───────────────────────────────────────────────────
 
-export async function getSearchSuggestions(q: string): Promise<SearchSuggestion[]> {
+export async function getSearchSuggestions(q: string, store?: string): Promise<SearchSuggestion[]> {
   if (!q || q.length < 2) return [];
-  const resp = await fetchWithAuth(`${API_BASE_URL}/products/suggestions?q=${encodeURIComponent(q)}`, { headers: getHeaders() });
+  const params = new URLSearchParams({ q });
+  if (store) params.set('store', store);
+  const resp = await fetchWithAuth(`${API_BASE_URL}/products/suggestions?${params}`, { headers: getHeaders() });
   const json = await resp.json();
   if (!json.success) return [];
   return json.data;

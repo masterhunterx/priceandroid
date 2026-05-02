@@ -308,19 +308,20 @@ def search_products(
         return response
 
 @router.get("/suggestions", response_model=UnifiedResponse)
-def get_search_suggestions(q: str = Query("", min_length=1)):
+def get_search_suggestions(
+    q: str = Query("", min_length=1),
+    store: Optional[str] = Query(None, description="Filtrar por slug de tienda"),
+):
     """
     KAIROS Suggestion Engine: Autocompletado rápido con product_id para navegación directa.
     """
     if not q or len(q.strip()) < 2:
         return UnifiedResponse(data=[])
 
-    q_clean = q.strip().lower()
-    q_esc   = q_clean.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
-    term    = f"{q_esc}%"
+    q_clean = _strip_accents(q.strip().lower())
 
     with get_session() as session:
-        rows = (
+        base_q = (
             session.query(
                 StoreProduct.name,
                 StoreProduct.brand,
@@ -331,14 +332,13 @@ def get_search_suggestions(q: str = Query("", min_length=1)):
             )
             .join(Store)
             .outerjoin(ProductMatch, ProductMatch.store_product_id == StoreProduct.id)
-            .filter(
-                StoreProduct.in_stock == True,
-                (func.lower(StoreProduct.name).like(term, escape='\\')) |
-                (func.lower(StoreProduct.brand).like(term, escape='\\'))
-            )
-            .limit(20)
-            .all()
+            .filter(StoreProduct.in_stock == True)
         )
+        # Reutiliza el mismo filtro resiliente a acentos y typos que /search
+        base_q = _build_text_filter(base_q, q)
+        if store:
+            base_q = base_q.filter(Store.slug == store)
+        rows = base_q.limit(20).all()
 
         seen_names  = set()
         seen_brands = set()
@@ -358,7 +358,7 @@ def get_search_suggestions(q: str = Query("", min_length=1)):
                 })
                 seen_names.add(key)
 
-            if brand and brand.lower().startswith(q_clean):
+            if brand and _strip_accents(brand.lower()).startswith(q_clean):
                 bkey = brand.strip().lower()
                 if bkey not in seen_brands:
                     results.append({
