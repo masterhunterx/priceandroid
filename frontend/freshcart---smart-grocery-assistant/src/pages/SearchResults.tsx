@@ -32,7 +32,7 @@ const OFFER_BADGE: Record<string, { cls: string; icon: string; label: string }> 
 const SearchResults: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { getBranchContext, selectedStore } = useLocation();
+  const { getBranchContext, selectedStore, setSelectedStore } = useLocation();
 
   const query        = searchParams.get('q') || '';
   const categoryParam = searchParams.get('category') || '';
@@ -73,6 +73,7 @@ const SearchResults: React.FC = () => {
     const next = store === slug ? '' : slug;
     setStore(next);
     setPage(1);
+    setSelectedStore(next || null);
     const p = new URLSearchParams(searchParams);
     if (next) p.set('store', next); else p.delete('store');
     setSearchParams(p, { replace: true });

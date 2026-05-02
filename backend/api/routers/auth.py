@@ -107,6 +107,8 @@ def _check_rate_limit(ip: str) -> bool:
         _login_attempts[ip] = recent
         return True
 
+UTC = timezone.utc
+
 # ── Configuración JWT ──────────────────────────────────────────────────────────
 SECRET_KEY  = os.getenv("JWT_SECRET_KEY", "insecure-default-change-in-production")
 ALGORITHM   = "HS256"

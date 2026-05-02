@@ -13,14 +13,14 @@ API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 # ── API Key brute-force protection ─────────────────────────────────────────────
-# Bloquea IPs que envíen demasiadas API keys incorrectas
-_APIKEY_FAIL_MAX    = 10    # intentos fallidos máximos
+# Rate-limit IPs que envíen demasiadas API keys incorrectas (sin bloqueo permanente)
+_APIKEY_FAIL_MAX    = 50    # intentos antes de throttle (subido de 10 para móviles)
 _APIKEY_FAIL_WINDOW = 3600  # ventana de 1 hora
 _apikey_failures: dict[str, list] = {}
 _apikey_lock = threading.Lock()
 
 def _register_apikey_failure(ip: str) -> bool:
-    """Registra un fallo de API key. Retorna True si la IP debe bloquearse."""
+    """Registra un fallo de API key. Retorna True si debe devolver 429 (nunca bloqueo permanente)."""
     now = time.time()
     with _apikey_lock:
         recent = [t for t in _apikey_failures.get(ip, []) if now - t < _APIKEY_FAIL_WINDOW]
@@ -92,8 +92,10 @@ async def get_api_key(request: Request, api_key: str = Security(api_key_header))
         client_ip = _get_real_ip(request)
         logger.warning(f"[SECURITY] API Key incorrecta desde IP: {client_ip}")
         if _register_apikey_failure(client_ip):
-            Shield3.block_ip(client_ip, reason="Brute force: demasiadas API keys incorrectas")
-            logger.critical(f"[SECURITY] IP {client_ip} bloqueada por brute force de API key")
+            # Rate-limit temporal (429) en vez de bloqueo permanente — evita auto-bloquear móviles
+            # con JWT expirado que envían requests sin auth mientras refrescan token.
+            logger.warning(f"[SECURITY] IP {client_ip} throttled por demasiadas API keys incorrectas")
+            raise HTTPException(status_code=429, detail="Demasiados intentos. Intenta más tarde.")
         raise HTTPException(status_code=403, detail="Credenciales inválidas.")
 
     # API key es acceso de herramienta/CLI — se trata como usuario genérico
