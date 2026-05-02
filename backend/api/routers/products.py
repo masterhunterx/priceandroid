@@ -73,11 +73,17 @@ def _strip_accents(text: str) -> str:
     )
 
 
+_WILDCARD_SENTINEL = "\x01"  # reemplaza ñ antes de escape para que quede como wildcard
+
 def _build_text_filter(query_obj, q: str):
-    """Aplica filtro de búsqueda resiliente a acentos y errores tipográficos en vocales."""
-    tok = _strip_accents(q.strip().lower())
+    """
+    Aplica filtro de búsqueda resiliente a acentos, ñ y errores tipográficos en vocales.
+    ñ→ wildcard, vocales→ wildcard; usa sentinel para proteger ñ del escape.
+    """
+    tok = q.strip().lower().replace('ñ', _WILDCARD_SENTINEL)
+    tok = _strip_accents(tok)  # strip otros acentos; sentinel no se toca
     tok_esc = tok.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
-    pattern = f"%{re.sub(r'[aeiou]', '_', tok_esc)}%"
+    pattern = f"%{re.sub(r'[aeiou\x01]', '_', tok_esc)}%"
     return query_obj.filter(
         (func.lower(StoreProduct.name).like(pattern, escape='\\')) |
         (func.lower(StoreProduct.brand).like(pattern, escape='\\'))
@@ -310,17 +316,18 @@ def search_products(
 @router.get("/suggestions", response_model=UnifiedResponse)
 def get_search_suggestions(
     q: str = Query("", min_length=1),
-    store: Optional[str] = Query(None, description="Filtrar por slug de tienda"),
+    store: Optional[str] = Query(None, description="Tienda preferida (slug); hace fallback a todas"),
 ):
     """
     KAIROS Suggestion Engine: Autocompletado rápido con product_id para navegación directa.
+    Prioriza la tienda seleccionada; si hay pocos resultados, completa con otras tiendas.
     """
     if not q or len(q.strip()) < 2:
         return UnifiedResponse(data=[])
 
     q_clean = _strip_accents(q.strip().lower())
 
-    with get_session() as session:
+    def _query_rows(session, filter_store: Optional[str], limit: int):
         base_q = (
             session.query(
                 StoreProduct.name,
@@ -334,11 +341,22 @@ def get_search_suggestions(
             .outerjoin(ProductMatch, ProductMatch.store_product_id == StoreProduct.id)
             .filter(StoreProduct.in_stock == True)
         )
-        # Reutiliza el mismo filtro resiliente a acentos y typos que /search
         base_q = _build_text_filter(base_q, q)
-        if store:
-            base_q = base_q.filter(Store.slug == store)
-        rows = base_q.limit(20).all()
+        if filter_store:
+            base_q = base_q.filter(Store.slug == filter_store)
+        return base_q.limit(limit).all()
+
+    with get_session() as session:
+        # Primero busca en la tienda seleccionada
+        rows = _query_rows(session, store, 20) if store else []
+
+        # Si hay pocos resultados (<3 productos), completa con todas las tiendas
+        if len(rows) < 3:
+            all_rows = _query_rows(session, None, 20)
+            # Pone las filas de la tienda seleccionada primero, luego las demás sin duplicar
+            store_names_seen = {r[0].strip().lower() for r in rows}
+            extra = [r for r in all_rows if r[0].strip().lower() not in store_names_seen]
+            rows = rows + extra
 
         seen_names  = set()
         seen_brands = set()
