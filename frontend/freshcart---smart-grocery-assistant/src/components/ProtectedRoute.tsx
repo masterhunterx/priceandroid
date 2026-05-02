@@ -3,11 +3,10 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isGuest } = useAuth();
   const location = useLocation();
 
-  if (!isAuthenticated) {
-    // Guarda la ruta actual para redirigir después del login
+  if (!isAuthenticated && !isGuest) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

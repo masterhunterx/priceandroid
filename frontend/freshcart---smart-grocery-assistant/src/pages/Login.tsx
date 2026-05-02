@@ -20,7 +20,7 @@ declare global {
 }
 
 const Login: React.FC = () => {
-  const { login, setSession } = useAuth();
+  const { login, setSession, enterGuestMode } = useAuth();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
@@ -213,6 +213,15 @@ const Login: React.FC = () => {
         )}
 
         {loginError && <ErrorBox msg={loginError} />}
+
+        {/* Explorar sin cuenta */}
+        <button
+          onClick={() => { enterGuestMode(); navigate('/store-select', { replace: true }); }}
+          className="w-full h-12 flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 text-sm font-medium hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+        >
+          <span className="material-symbols-outlined text-[18px]">explore</span>
+          Explorar sin cuenta
+        </button>
 
         {/* Acceso administrador */}
         <div className="mt-4">

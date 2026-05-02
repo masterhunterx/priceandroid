@@ -40,7 +40,7 @@ const AppContent: React.FC = () => {
   const [isAppReady, setIsAppReady] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, isGuest, logout } = useAuth();
 
   useEffect(() => {
     function onForceLogout() {
@@ -142,7 +142,7 @@ const AppContent: React.FC = () => {
           </Routes>
           </div>
         </AnimatePresence>
-        {isAuthenticated && !isLoginPage && !isStoreSelectPage && <BottomNav />}
+        {(isAuthenticated || isGuest) && !isLoginPage && !isStoreSelectPage && <BottomNav />}
         {isAuthenticated && !isLoginPage && !isStoreSelectPage && <FeedbackButton />}
         {isAuthenticated && !isLoginPage && !isStoreSelectPage && <OnboardingTour />}
         <Toaster position="top-center" reverseOrder={false} />

@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 const ACCESS_KEY   = 'freshcart_access_token';
 const REFRESH_KEY  = 'freshcart_refresh_token';
 const USERNAME_KEY = 'freshcart_username';
+const GUEST_KEY    = 'freshcart_guest';
 
 function _decodeUsername(token: string): string | null {
   try {
@@ -16,9 +17,11 @@ interface AuthContextType {
   token: string | null;
   username: string | null;
   isAuthenticated: boolean;
+  isGuest: boolean;
   login: (username: string, password: string) => Promise<'ok' | 'pending'>;
   logout: () => void;
   setSession: (access_token: string, refresh_token: string, username: string) => void;
+  enterGuestMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>(null!);
@@ -31,6 +34,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const t = localStorage.getItem(ACCESS_KEY);
     return t ? _decodeUsername(t) : null;
   });
+  const [isGuest, setIsGuest] = useState<boolean>(
+    () => !!localStorage.getItem(GUEST_KEY) && !localStorage.getItem(ACCESS_KEY)
+  );
 
   // Intenta renovar el access token usando el refresh token guardado
   const tryRefresh = useCallback(async (): Promise<string | null> => {
@@ -128,24 +134,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return 'ok';
   }, []);
 
+  const enterGuestMode = useCallback(() => {
+    localStorage.setItem(GUEST_KEY, '1');
+    setIsGuest(true);
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USERNAME_KEY);
+    localStorage.removeItem(GUEST_KEY);
     setToken(null);
     setUsername(null);
+    setIsGuest(false);
   }, []);
 
   const setSession = useCallback((access_token: string, refresh_token: string, uname: string) => {
     localStorage.setItem(ACCESS_KEY, access_token);
     localStorage.setItem(REFRESH_KEY, refresh_token);
     localStorage.setItem(USERNAME_KEY, uname);
+    localStorage.removeItem(GUEST_KEY);
     setToken(access_token);
     setUsername(uname);
+    setIsGuest(false);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, username, isAuthenticated: !!token, login, logout, setSession }}>
+    <AuthContext.Provider value={{ token, username, isAuthenticated: !!token, isGuest, login, logout, setSession, enterGuestMode }}>
       {children}
     </AuthContext.Provider>
   );
