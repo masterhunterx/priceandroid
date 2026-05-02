@@ -74,6 +74,7 @@ def _strip_accents(text: str) -> str:
 
 
 _WILDCARD_SENTINEL = "\x01"  # reemplaza ñ antes de escape para que quede como wildcard
+_VOWEL_SENTINEL_RE = re.compile("[aeiou\x01]")
 
 def _build_text_filter(query_obj, q: str):
     """
@@ -83,7 +84,7 @@ def _build_text_filter(query_obj, q: str):
     tok = q.strip().lower().replace('ñ', _WILDCARD_SENTINEL)
     tok = _strip_accents(tok)  # strip otros acentos; sentinel no se toca
     tok_esc = tok.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
-    pattern = f"%{re.sub(r'[aeiou\x01]', '_', tok_esc)}%"
+    pattern = "%" + _VOWEL_SENTINEL_RE.sub('_', tok_esc) + "%"
     return query_obj.filter(
         (func.lower(StoreProduct.name).like(pattern, escape='\\')) |
         (func.lower(StoreProduct.brand).like(pattern, escape='\\'))
