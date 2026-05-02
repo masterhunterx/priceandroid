@@ -1,5 +1,13 @@
 /* Tailwind is loaded via CDN in index.html — no PostCSS directives needed */
 
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :root {
   --primary: #00f076;
   --background-light: #f8f9fb;

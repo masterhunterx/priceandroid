@@ -17,6 +17,7 @@ interface HomeHeaderProps {
   notifications: Notification[];
   toggleTheme: () => void;
   onOpenLocation: () => void;
+  onOpenStorePicker: () => void;
 }
 
 const HomeHeader: React.FC<HomeHeaderProps> = ({
@@ -26,6 +27,7 @@ const HomeHeader: React.FC<HomeHeaderProps> = ({
   notifications,
   toggleTheme,
   onOpenLocation,
+  onOpenStorePicker,
 }) => {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -74,38 +76,21 @@ const HomeHeader: React.FC<HomeHeaderProps> = ({
           )}
         </div>
 
-        {/* Store indicator */}
+        {/* Store picker chip */}
         <div className="flex-1 px-3">
-          {selectedStore && STORE_META[selectedStore] ? (
-            <div className="flex items-center gap-1.5">
-              <div
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: STORE_META[selectedStore].color }}
-              />
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-                {STORE_META[selectedStore].name}
-              </p>
-              <button
-                onClick={() => navigate('/store-select')}
-                className="ml-1 text-[9px] text-primary font-bold uppercase tracking-wider underline underline-offset-2"
-              >
-                cambiar
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-primary text-[16px]">store</span>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-                Todas las tiendas
-                <button
-                  onClick={() => navigate('/store-select')}
-                  className="ml-2 text-primary underline underline-offset-2"
-                >
-                  cambiar
-                </button>
-              </p>
-            </div>
-          )}
+          <button
+            onClick={onOpenStorePicker}
+            className="flex items-center gap-2 mb-0.5 active:opacity-70 transition-opacity"
+          >
+            <div
+              className="w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].color : '#00f076' }}
+            />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              {selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : 'Todas las tiendas'}
+            </span>
+            <span className="material-symbols-outlined text-slate-400 dark:text-slate-500 text-[14px]">expand_more</span>
+          </button>
           <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">
             {selectedStore && STORE_META[selectedStore]
               ? `Ofertas en ${STORE_META[selectedStore].name}`

@@ -25,6 +25,7 @@ interface PriceDropItem {
 }
 import { useAuth } from '../context/AuthContext';
 import HomeHeader from '../components/HomeHeader';
+import StorePickerSheet from '../components/StorePickerSheet';
 import StoreLogo from '../components/StoreLogo';
 import { useLocation } from '../context/LocationContext';
 import { useTheme } from '../context/ThemeContext';
@@ -59,6 +60,7 @@ const Home: React.FC = () => {
   const { addItem, isInCart } = useCart();
   const username = authUsername || 'Usuario';
   const [isLocationOpen, setIsLocationOpen] = useState(false);
+  const [isStorePickerOpen, setIsStorePickerOpen] = useState(false);
   const [priceDrops, setPriceDrops] = useState<PriceDropItem[]>([]);
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [loadingBasket, setLoadingBasket] = useState(true);
@@ -322,7 +324,13 @@ const Home: React.FC = () => {
       )}
 
       <LocationSelector isOpen={isLocationOpen} onClose={() => setIsLocationOpen(false)} />
-      <HomeHeader username={username} selectedStore={selectedStore} theme={theme} notifications={notifications} toggleTheme={toggleTheme} onOpenLocation={() => setIsLocationOpen(true)} />
+      <StorePickerSheet
+        isOpen={isStorePickerOpen}
+        currentStore={selectedStore}
+        onSelect={(slug) => { setSelectedStore(slug); }}
+        onClose={() => setIsStorePickerOpen(false)}
+      />
+      <HomeHeader username={username} selectedStore={selectedStore} theme={theme} notifications={notifications} toggleTheme={toggleTheme} onOpenLocation={() => setIsLocationOpen(true)} onOpenStorePicker={() => setIsStorePickerOpen(true)} />
 
       <main className="space-y-6 pb-4">
 
@@ -368,20 +376,6 @@ const Home: React.FC = () => {
         {loading && (
           <div className="mx-4 mt-4 h-32 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
         )}
-
-        {/* ── BUSCADOR CENTRAL ────────────────────────────────────────────── */}
-        <div className="px-4">
-          <button
-            onClick={() => navigate('/search')}
-            className="w-full flex items-center gap-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 shadow-sm active:scale-[0.98] transition-transform"
-          >
-            <span className="material-symbols-outlined text-primary text-[24px]">search</span>
-            <span className="text-slate-400 text-base font-medium flex-1 text-left">
-              {storeName ? `Buscar en ${storeName}...` : 'Buscar productos...'}
-            </span>
-            <span className="material-symbols-outlined text-slate-300 text-[18px]">tune</span>
-          </button>
-        </div>
 
         {/* ── CATEGORÍAS (scroll horizontal compacto) ─────────────────────── */}
         <div className="px-4">
