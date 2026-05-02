@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "145660625437-ok47kck7ih380973vijtqetnfnsoim1f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "cl.freshcart.app",
+            "certificate_hash": "76a468f79b5051574052f3d79ae353fde67ae61e"
+          }
+        },
+        {
           "client_id": "145660625437-vutld3gc335dr9jkohsgjgstmkd2msv8.apps.googleusercontent.com",
           "client_type": 3
         }

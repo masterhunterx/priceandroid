@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDeals, getCategories, formatCurrency, getNotifications, getHistoricLows, refreshNotifications, searchProducts, readPriceSnapshots, writePriceSnapshots, PriceSnapshotMap } from '../lib/api';
 import { Deal, Category, Notification, Branch, Product, HistoricLow } from '../types';
@@ -93,6 +93,7 @@ const Home: React.FC = () => {
   };
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
 
     setDealsOffset(0);
@@ -234,7 +235,7 @@ const Home: React.FC = () => {
       }
     });
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [selectedStore, refreshKey]);
 
   const filterByStore = (raw: typeof deals) =>
@@ -299,10 +300,10 @@ const Home: React.FC = () => {
   const heroItem = deals[0] ?? null;
   const storeName = selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : null;
   const totalBasket = basket.reduce((s, i) => s + i.price, 0);
-  const allAlerts = [
+  const allAlerts = useMemo(() => [
     ...priceDrops.map(d => ({ type: 'drop' as const, id: d.productId, name: d.name, imageUrl: d.imageUrl, price: d.currentPrice, oldPrice: d.previousPrice, pct: d.dropPercent, storeSlug: d.storeSlug, storeName: d.storeName })),
     ...(selectedStore ? historicLows.filter(h => h.store_slug === selectedStore) : historicLows).map(h => ({ type: 'low' as const, id: h.product_id, name: h.product_name, imageUrl: h.image_url ?? '', price: h.min_price_all_time, oldPrice: null, pct: null, storeSlug: h.store_slug ?? '', storeName: h.store_name })),
-  ];
+  ], [priceDrops, historicLows, selectedStore]);
 
   return (
     <div
@@ -337,7 +338,7 @@ const Home: React.FC = () => {
             </div>
             <div className="relative flex items-center gap-4 p-4">
               <div className="size-24 shrink-0 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden border border-white/10">
-                <img src={heroItem.image_url} alt={heroItem.product_name} className="size-20 object-contain" />
+                <img src={heroItem.image_url} alt={heroItem.product_name} className="size-20 object-contain" loading="lazy" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1">
@@ -448,7 +449,7 @@ const Home: React.FC = () => {
                     >
                       <div className="size-10 rounded-xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center shrink-0 overflow-hidden">
                         {item.imageUrl
-                          ? <img src={item.imageUrl} alt={item.name} className="size-9 object-contain" />
+                          ? <img src={item.imageUrl} alt={item.name} className="size-9 object-contain" loading="lazy" />
                           : <span className="material-symbols-outlined text-primary text-[20px]">{item.icon}</span>
                         }
                       </div>
@@ -514,7 +515,7 @@ const Home: React.FC = () => {
                     </span>
                   </div>
                   <div className="size-10 shrink-0 bg-slate-50 dark:bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center">
-                    <img src={alert.imageUrl} alt={alert.name} className="size-9 object-contain" />
+                    <img src={alert.imageUrl} alt={alert.name} className="size-9 object-contain" loading="lazy" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">{alert.name}</p>
@@ -581,7 +582,7 @@ const Home: React.FC = () => {
                     <div className="absolute top-2 right-2 size-5 overflow-hidden rounded">
                       <StoreLogo slug={deal.store_slug} name={deal.store_name} className="size-full" />
                     </div>
-                    <img src={deal.image_url} alt={deal.product_name} className="size-full object-contain p-3" />
+                    <img src={deal.image_url} alt={deal.product_name} className="size-full object-contain p-3" loading="lazy" />
                   </div>
                   <div className="p-3">
                     <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight mb-1">{deal.product_name}</p>

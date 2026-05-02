@@ -488,6 +488,7 @@ const SearchResults: React.FC = () => {
                       src={product.image_url}
                       alt={product.name}
                       className="size-full object-contain"
+                      loading="lazy"
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                     />
                   </div>

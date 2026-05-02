@@ -17,6 +17,8 @@ Usage (inside any scraper's normalize_product function):
     return normalize_scraped_product(raw_dict)
 """
 
+import re
+
 # Fields that are pure UI formatting strings.
 # These are stripped out during normalization so the frontend
 # controls its own display logic.
@@ -42,18 +44,23 @@ def compute_unit_price(price: float, measurement_unit: str, unit_multiplier: flo
     if not price or price <= 0:
         return None, None
 
-    unit = (measurement_unit or "").lower().strip()
+    unit = (measurement_unit or "").strip().lower()
+    unit = re.sub(r'[^a-z]', '', unit)  # Quitar espacios, puntos, números
+    unit = unit.rstrip('s')             # Plurales: "kgs"→"kg", "grs"→"gr", "mls"→"ml"
+    # Alias comunes
+    unit = {'k': 'kg', 'gr': 'g', 'gramo': 'g', 'kilogramo': 'kg', 'litro': 'l', 'mililitro': 'ml'}.get(unit, unit)
+
     mult = float(unit_multiplier or 1)
     if mult <= 0:
         return None, None
 
-    if unit in ("g", "gr", "grs", "gramos"):
+    if unit in ("g",):
         return round(price / mult * 100, 1), "$/100g"
-    if unit in ("kg", "kgs", "kilogramo", "kilogramos"):
+    if unit in ("kg",):
         return round(price / (mult * 1000) * 100, 1), "$/100g"
-    if unit in ("ml", "cc", "mililitros"):
+    if unit in ("ml", "cc"):
         return round(price / mult * 100, 1), "$/100ml"
-    if unit in ("l", "lt", "lts", "litro", "litros"):
+    if unit in ("l", "lt"):
         return round(price / (mult * 1000) * 100, 1), "$/100ml"
     return None, None
 

@@ -542,7 +542,8 @@ def normalize_product_ssr(raw_product: dict):
 
     canonical = raw_product.get("canonicalUrl", "")
 
-    if not name and not current_price:
+    if not name or not current_price:
+        _logger.warning(f"[Lider] Producto descartado — name={bool(name)}, price={current_price}, id={raw_product.get('id', '?')}")
         return None
 
     return normalize_scraped_product({
@@ -653,7 +654,8 @@ def normalize_product(raw_product):
             brand = ai_data.get("brand") or brand
             print(f"  [SUCCESS] AI recovered product: {name} (${current_price})")
 
-    if not name and not current_price:
+    if not name or not current_price:
+        _logger.warning(f"[Lider] Producto descartado — name={bool(name)}, price={current_price}, id={raw_product.get('id', '?')}")
         return None # Unrecoverable
 
     return normalize_scraped_product({

@@ -183,6 +183,22 @@ _revoked_lock = Lock()
 _RL_MAX_REVOKED = 10_000
 
 
+def _start_revoked_cleanup():
+    import threading
+    def _cleanup_loop():
+        while True:
+            import time as _time
+            _time.sleep(300)
+            now = _time.time()
+            with _revoked_lock:
+                expired = [k for k, exp in _revoked_tokens.items() if exp < now]
+                for k in expired:
+                    del _revoked_tokens[k]
+    t = threading.Thread(target=_cleanup_loop, daemon=True)
+    t.start()
+_start_revoked_cleanup()
+
+
 def _revoke_token(payload: dict) -> None:
     sub = payload.get("sub", "")
     iat = payload.get("iat", 0)
@@ -941,6 +957,9 @@ def google_login(body: GoogleLoginRequest, request: Request):
                 while db.query(User).filter(User.username == username).first():
                     username = f"{base}{suffix}"
                     suffix += 1
+                    if suffix > 99:
+                        username = f"{base}_{uuid.uuid4().hex[:8]}"
+                        break
                 new_user = User(
                     username=username,
                     email=email,
@@ -1055,6 +1074,9 @@ def firebase_login(body: FirebaseLoginRequest, request: Request):
                 while db.query(User).filter(User.username == username).first():
                     username = f"{base}{suffix}"
                     suffix += 1
+                    if suffix > 99:
+                        username = f"{base}_{uuid.uuid4().hex[:8]}"
+                        break
                 new_user = User(
                     username=username,
                     email=email,

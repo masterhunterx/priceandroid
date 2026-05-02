@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, field_validator, conint, conlist
+from pydantic import BaseModel, field_validator, conint, conlist, constr
 
 class StoreOut(BaseModel):
     id: int
@@ -156,11 +156,11 @@ class OptimizeCartRequest(BaseModel):
 
 class ChatMessage(BaseModel):
     role: str # "user" or "assistant"
-    content: str
+    content: constr(max_length=2000)
 
 
 class ChatRequest(BaseModel):
-    messages: List[ChatMessage]
+    messages: conlist(ChatMessage, min_length=1, max_length=50)
 
 
 class UnifiedResponse(BaseModel):

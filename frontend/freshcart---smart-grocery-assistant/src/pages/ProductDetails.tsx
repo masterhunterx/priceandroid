@@ -45,7 +45,7 @@ const ProductDetails: React.FC = () => {
   const touchStartY = useRef(0);
   const PULL_THRESHOLD = 70;
 
-  const loadProduct = async (silent = false, cancelled?: { value: boolean }) => {
+  const loadProduct = async (silent = false, signal?: AbortSignal) => {
     if (!id) return;
     const numericId = parseInt(id, 10);
     if (isNaN(numericId)) return;
@@ -53,7 +53,7 @@ const ProductDetails: React.FC = () => {
     try {
       const branchContext = getBranchContext();
       const data = await getProductDetails(numericId, branchContext);
-      if (cancelled?.value) return;
+      if (signal?.aborted) return;
       setProduct(data);
       setIsFavorite(data.is_favorite ?? false);
       const bestPoint = data.prices?.find(p => p.in_stock && p.price === data.best_price) ?? data.prices?.find(p => p.in_stock) ?? null;
@@ -72,16 +72,17 @@ const ProductDetails: React.FC = () => {
         writePriceSnapshots(snaps);
       }
     } catch (error) {
+      if (signal?.aborted) return;
       console.error('Error loading product details:', error);
     } finally {
-      if (!cancelled?.value && !silent) setLoading(false);
+      if (!signal?.aborted && !silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    const cancelled = { value: false };
-    loadProduct(false, cancelled);
-    return () => { cancelled.value = true; };
+    const controller = new AbortController();
+    loadProduct(false, controller.signal);
+    return () => controller.abort();
   }, [id]);
 
   useEffect(() => {
@@ -97,6 +98,7 @@ const ProductDetails: React.FC = () => {
   }, [product?.id, product?.category]);
 
   const handleSync = async () => {
+    if (syncing) return;
     if (!id || !product) return;
     setSyncing(true);
     const loadingToast = toast.loading('Sincronizando precios en vivo...');
@@ -278,6 +280,7 @@ const ProductDetails: React.FC = () => {
               src={product.image_url}
               alt={product.name}
               className="max-w-full max-h-[280px] object-contain"
+              loading="lazy"
             />
           </div>
         </div>
@@ -444,7 +447,7 @@ const ProductDetails: React.FC = () => {
                       onClick={() => navigate(`/product/${sub.id}`)}
                       className="flex-none w-32 bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 cursor-pointer active:scale-95 transition-all"
                      >
-                        <img src={sub.image_url} alt={sub.name} className="size-16 object-contain mb-2 mx-auto" />
+                        <img src={sub.image_url} alt={sub.name} className="size-16 object-contain mb-2 mx-auto" loading="lazy" />
                         <h5 className="text-[10px] font-bold text-slate-900 dark:text-white truncate">{sub.name}</h5>
                         <p className="text-[12px] font-black text-primary mt-1">{formatCurrency(sub.best_price)}</p>
                         {product.best_price && sub.best_price && sub.best_price < product.best_price && (

@@ -143,12 +143,11 @@ async def shield_security_middleware(request: Request, call_next):
     """Middleware de defensa activa: rate limiting, bloqueo de IPs y WAF."""
     path = request.url.path
 
-    # /metrics — solo accesible si METRICS_TOKEN no está configurado o el token coincide
+    # /metrics — siempre requiere token; si no está configurado, denegar con 403
     if path.startswith("/metrics"):
-        if _METRICS_TOKEN:
-            token = request.headers.get("X-Metrics-Token", "")
-            if token != _METRICS_TOKEN:
-                return JSONResponse(status_code=403, content={"error": "Forbidden"})
+        token = request.headers.get("X-Metrics-Token", "")
+        if not _METRICS_TOKEN or token != _METRICS_TOKEN:
+            return JSONResponse(status_code=403, content={"error": "Forbidden"})
         return await call_next(request)
 
     # /api/auth/admin/shield — gestión de Shield; bypass de IP block para permitir desbloqueo

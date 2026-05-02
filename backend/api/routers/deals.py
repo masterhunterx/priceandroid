@@ -215,6 +215,8 @@ def list_deals(
     discount_percent DESC directamente en BD — sin cargar pools de 500 filas en Python.
     """
     _VALID_STORE_SLUGS = frozenset({'jumbo', 'lider', 'santa_isabel', 'unimarc'})
+    if store:
+        store = store.lower()
     if store and store not in _VALID_STORE_SLUGS:
         raise HTTPException(status_code=400, detail="Slug de tienda no válido.")
 

@@ -14,7 +14,6 @@ def compute_content_hash(product_data: dict) -> str:
         str(product_data.get("category_path", "")),
         str(product_data.get("top_category", "")),
         str(product_data.get("measurement_unit", "")),
-        str(product_data.get("in_stock", "")),
     )
     return hashlib.md5("|".join(fields).encode(), usedforsecurity=False).hexdigest()  # nosec B324
 

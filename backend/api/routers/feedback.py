@@ -158,14 +158,18 @@ def analyze_feedback():
         raw = ai._call_ai_text(system_prompt, [], user_msg)
 
         # Extraer JSON de la respuesta (la IA a veces añade markdown)
+        import re as _re
         plans_list = []
         if raw:
-            clean = raw.strip()
-            if "```" in clean:
-                clean = clean.split("```")[1]
-                if clean.startswith("json"):
-                    clean = clean[4:]
-            plans_list = json.loads(clean.strip())
+            json_match = _re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', raw)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_str = raw.strip()
+            try:
+                plans_list = json.loads(json_str)
+            except (json.JSONDecodeError, ValueError):
+                raise HTTPException(status_code=500, detail="Error procesando respuesta IA")
 
         # Mapear plan por id de feedback
         plans_by_id = {item["id"]: item for item in plans_list if "id" in item}

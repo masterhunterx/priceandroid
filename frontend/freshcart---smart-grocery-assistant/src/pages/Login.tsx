@@ -138,7 +138,7 @@ const Login: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) return;
+    if (loginLoading || !username || !password) return;
     setLoginLoading(true);
     setLoginError('');
     try {

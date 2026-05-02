@@ -294,6 +294,8 @@ def _base_staples(found_cats: set, persons: int) -> list:
 @router.get("/deals-menu", response_model=UnifiedResponse)
 def deals_menu_endpoint(
     persons: int = Query(2, ge=1, le=10, description="Número de personas"),
+    page: int = Query(1, ge=1, description="Página de ofertas a consultar"),
+    page_size: int = Query(50, ge=1, le=200, description="Ofertas por página"),
     current_user: str = Depends(get_api_key),
 ):
     """
@@ -313,7 +315,8 @@ def deals_menu_endpoint(
                 StoreProduct.in_stock == True,
             )
             .order_by(Price.scraped_at.desc())
-            .limit(300)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
             .all()
         )
 

@@ -162,7 +162,7 @@ class StoreProduct(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     __table_args__ = (
-        UniqueConstraint("store_id", "external_id", name="uq_store_external_id"),
+        UniqueConstraint("store_id", "external_id", "branch_id", name="uq_store_external_branch_id"),
     )
 
     store = relationship("Store", back_populates="store_products")

@@ -247,6 +247,7 @@ def _upsert_product_record(
     sp = db_session.query(StoreProduct).filter_by(
         store_id=store_id,
         external_id=external_id,
+        branch_id=branch_id,
     ).first()
 
     now = datetime.now(UTC)
@@ -264,7 +265,11 @@ def _upsert_product_record(
         sp.top_category     = product_data.get("top_category", sp.top_category)
         sp.measurement_unit = product_data.get("measurement_unit", sp.measurement_unit)
         sp.unit_price_norm  = product_data.get("unit_price_norm", sp.unit_price_norm)
-        sp.in_stock         = product_data.get("in_stock", sp.in_stock)
+        old_stock = sp.in_stock
+        new_stock = product_data.get("in_stock", sp.in_stock)
+        if old_stock != new_stock:
+            logger.info(f"  [STOCK] '{sp.name[:40]}': {'✓ disponible' if new_stock else '✗ agotado'}")
+        sp.in_stock         = new_stock
         sp.content_hash     = new_hash
         sp.last_seen        = now
         sp.last_sync        = now
@@ -297,7 +302,18 @@ def _upsert_product_record(
 
 def _maybe_insert_price(db_session, sp: "StoreProduct", product_data: dict, branch: "Branch | None") -> bool:
     """Inserta una fila Price solo si el precio real cambió (Lazy Pricing). Retorna True si insertó."""
-    new_price = product_data.get("price")
+    price = product_data.get("price")
+    list_price = product_data.get("list_price")
+
+    if price is None or price < 0:
+        logger.warning(f"[PRICE] Precio inválido ({price}) para {product_data.get('name', '?')[:40]} — descartado")
+        return False
+    if list_price and price > 0 and list_price < price:
+        logger.warning(f"[PRICE] list_price ({list_price}) < price ({price}) — corrigiendo inversión")
+        list_price = None  # Descartar list_price inválido en lugar de guardar datos corruptos
+        product_data = {**product_data, "list_price": None}
+
+    new_price = price
     if not price_changed(sp, new_price):
         return False
     db_session.add(Price(

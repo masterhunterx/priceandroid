@@ -20,11 +20,14 @@ import sys
 import os
 import csv
 import json
+import logging
 import re
 import time
 import argparse
 from datetime import datetime
 from urllib.parse import urlencode
+
+_logger = logging.getLogger("FreshCartAPI")
 
 try:
     import requests
