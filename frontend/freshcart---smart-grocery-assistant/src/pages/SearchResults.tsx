@@ -128,6 +128,7 @@ const SearchResults: React.FC = () => {
   // ── Execute search whenever query/sort/store/page changes ─────────────────────
   useEffect(() => {
     if (!query && !categoryParam) { setResults([]); setTotal(0); setSearchError(false); return; }
+    const controller = new AbortController();
     let cancelled = false;
     setSearchError(false);
     setLoading(true);
@@ -146,7 +147,7 @@ const SearchResults: React.FC = () => {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, categoryParam, sort, store, page]);
 

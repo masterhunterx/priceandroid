@@ -15,11 +15,14 @@ Usage:
 import argparse
 import csv
 import json
+import logging
 import os
 import re
 import sys
 import time
 from datetime import datetime
+
+logger = logging.getLogger("FreshCartAPI")
 
 try:
     from domain.normalizer import normalize_scraped_product, short_search_name
@@ -285,7 +288,8 @@ def normalize_product(raw_product):
             print(f"  [SUCCESS] AI recovered product: {name} (${current_price})")
 
     if not name and not current_price:
-        return None  # Unrecoverable
+        logger.warning("[UNIMARC] Producto descartado — sin nombre ni precio: %s", item.get("productId", "?"))
+        return None
 
     return normalize_scraped_product({
         "product_id": item.get("productId", ""),

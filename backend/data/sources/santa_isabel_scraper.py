@@ -16,11 +16,14 @@ Usage:
 import argparse
 import csv
 import json
+import logging
 import os
 import re
 import sys
 import time
 from datetime import datetime
+
+logger = logging.getLogger("FreshCartAPI")
 from urllib.parse import urlencode
 
 try:
@@ -324,7 +327,8 @@ def normalize_product(raw_product):
             print(f"  [SUCCESS] AI recovered product: {name} (${price})")
 
     if not name and not price:
-        return None  # Unrecoverable
+        logger.warning("[SANTA_ISABEL] Producto descartado — sin nombre ni precio: %s", raw_product.get("productId", "?"))
+        return None
 
     return normalize_scraped_product({
         "product_id": raw_product.get("productId", ""),
