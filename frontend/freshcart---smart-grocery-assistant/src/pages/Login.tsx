@@ -75,7 +75,9 @@ const Login: React.FC = () => {
       }
       navigate('/store-select', { replace: true });
     } catch (err: any) {
-      setLoginError(err.message || 'Error al iniciar sesión con Google');
+      const msg: string = err.message || '';
+      const cancelled = /cancel|dismiss|closed|no credentials/i.test(msg);
+      if (!cancelled) setLoginError(msg || 'Error al iniciar sesión con Google');
     } finally {
       setGoogleLoading(false);
     }
