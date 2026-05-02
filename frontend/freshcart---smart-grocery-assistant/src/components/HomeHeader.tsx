@@ -45,29 +45,29 @@ const HomeHeader: React.FC<HomeHeaderProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showUserMenu]);
 
+  const storeColor = selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].color : '#00f076';
+  const storeName = selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : null;
+
   return (
-    <header
-      className="sticky top-0 z-50 backdrop-blur-md"
-      style={{ backgroundColor: theme === 'dark' ? 'var(--store-header-bg-dark)' : 'var(--store-header-bg-light)' }}
-    >
-      <div className="flex items-center p-4 pb-0 justify-between">
+    <header className="sticky top-0 z-50 bg-white dark:bg-black border-b border-gray-100 dark:border-zinc-900">
+      <div className="flex items-center px-5 py-3 gap-3">
         {/* User menu */}
         <div className="relative" ref={userMenuRef}>
           <button
             onClick={() => setShowUserMenu(v => !v)}
-            className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 active:scale-90 transition-transform"
+            className="size-9 rounded-full bg-gray-100 dark:bg-zinc-900 flex items-center justify-center active:scale-90 transition-transform"
           >
-            <span className="material-symbols-outlined text-[24px]">person</span>
+            <span className="material-symbols-outlined text-[20px] text-gray-500 dark:text-zinc-400">person</span>
           </button>
           {showUserMenu && (
-            <div className="absolute left-0 top-12 z-50 min-w-[160px] rounded-2xl bg-white dark:bg-slate-800 shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-                <p className="text-xs text-slate-400 dark:text-slate-500">Sesión iniciada como</p>
-                <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{username}</p>
+            <div className="absolute left-0 top-11 z-50 min-w-[180px] rounded-2xl bg-white dark:bg-zinc-900 shadow-xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
+                <p className="text-[11px] text-gray-400 dark:text-zinc-500">Sesión iniciada como</p>
+                <p className="text-sm font-bold text-black dark:text-white truncate">{username}</p>
               </div>
               <button
                 onClick={() => { setShowUserMenu(false); logout(); navigate('/login'); }}
-                className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
               >
                 <span className="material-symbols-outlined text-[18px]">logout</span>
                 Cerrar sesión
@@ -76,52 +76,41 @@ const HomeHeader: React.FC<HomeHeaderProps> = ({
           )}
         </div>
 
-        {/* Store picker chip */}
-        <div className="flex-1 px-3">
+        {/* Store picker + title */}
+        <div className="flex-1 min-w-0">
           <button
             onClick={onOpenStorePicker}
-            className="flex items-center gap-2 mb-0.5 active:opacity-70 transition-opacity"
+            className="flex items-center gap-1.5 mb-0.5 active:opacity-60 transition-opacity"
           >
-            <div
-              className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].color : '#00f076' }}
-            />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              {selectedStore && STORE_META[selectedStore] ? STORE_META[selectedStore].name : 'Todas las tiendas'}
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: storeColor }} />
+            <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-zinc-500">
+              {storeName || 'Todas las tiendas'}
             </span>
-            <span className="material-symbols-outlined text-slate-400 dark:text-slate-500 text-[14px]">expand_more</span>
+            <span className="material-symbols-outlined text-gray-400 dark:text-zinc-500 text-[14px]">expand_more</span>
           </button>
-          <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">
-            {selectedStore && STORE_META[selectedStore]
-              ? `Ofertas en ${STORE_META[selectedStore].name}`
-              : 'Mejores Ofertas'}
-          </h2>
+          <h1 className="text-[18px] font-black text-black dark:text-white tracking-tight leading-tight">
+            {storeName ? `Ofertas en ${storeName}` : 'Mejores Ofertas'}
+          </h1>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={toggleTheme}
-            className="flex size-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all active:scale-90"
-          >
-            <span className="material-symbols-outlined">
+        <div className="flex items-center gap-1">
+          <button onClick={toggleTheme} className="size-10 flex items-center justify-center active:scale-90 transition-transform">
+            <span className="material-symbols-outlined text-[22px] text-gray-400 dark:text-zinc-500">
               {theme === 'dark' ? 'light_mode' : 'dark_mode'}
             </span>
           </button>
-          <button
-            onClick={() => navigate('/notifications')}
-            className="relative flex size-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-          >
-            <span className="material-symbols-outlined">notifications</span>
+          <button onClick={() => navigate('/notifications')} className="relative size-10 flex items-center justify-center">
+            <span className="material-symbols-outlined text-[22px] text-gray-400 dark:text-zinc-500">notifications</span>
             {notifications.length > 0 && (
-              <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500" />
             )}
           </button>
         </div>
       </div>
 
       {/* Search bar */}
-      <div className="px-4 py-3">
+      <div className="px-5 pb-3">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -129,19 +118,16 @@ const HomeHeader: React.FC<HomeHeaderProps> = ({
             if (q) navigate(`/search?q=${q}${selectedStore ? `&store=${selectedStore}` : ''}`);
           }}
           data-tour="search"
-          className="flex w-full items-stretch rounded-xl h-12 shadow-sm bg-white"
-          style={theme === 'dark' ? { backgroundColor: 'var(--store-surface-dark)' } : undefined}
+          className="flex items-center bg-gray-100 dark:bg-zinc-900 rounded-xl h-11 px-4 gap-2"
         >
-          <div className="text-primary flex items-center justify-center pl-4">
-            <span className="material-symbols-outlined">search</span>
-          </div>
+          <span className="material-symbols-outlined text-[20px] text-gray-400 dark:text-zinc-500 shrink-0">search</span>
           <input
             name="search"
-            className="flex-1 flex items-center px-4 pl-2 text-slate-900 dark:text-white bg-transparent border-none focus:ring-0 placeholder:text-slate-400 dark:placeholder:text-[#9db9a8] text-base font-normal"
+            className="flex-1 bg-transparent text-black dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-500 text-[15px] font-medium border-none focus:ring-0 focus:outline-none"
             placeholder="Buscar productos o marcas..."
           />
-          <button type="submit" className="flex items-center pr-3">
-            <span className="material-symbols-outlined text-primary">arrow_forward</span>
+          <button type="submit" className="shrink-0">
+            <span className="material-symbols-outlined text-[20px] text-gray-400 dark:text-zinc-500">arrow_forward</span>
           </button>
         </form>
       </div>

@@ -196,11 +196,11 @@ const ProductDetails: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-background-light dark:bg-background-dark">
-        <div className="size-20 border-4 border-primary border-t-transparent rounded-full animate-spin mb-8"></div>
-        <div className="w-64 h-64 bg-slate-200 dark:bg-slate-800 rounded-2xl mb-8 animate-pulse shadow-xl"></div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Conectando con {product?.best_store || 'el supermercado'}</h2>
-        <p className="text-slate-500 dark:text-slate-400 font-medium animate-pulse text-center px-10">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-black">
+        <div className="size-20 border-4 border-gray-200 dark:border-zinc-800 border-t-black dark:border-t-white rounded-full animate-spin mb-8"></div>
+        <div className="w-64 h-64 bg-gray-100 dark:bg-zinc-900 rounded-2xl mb-8 animate-pulse"></div>
+        <h2 className="text-xl font-bold text-black dark:text-white mb-2">Conectando con {product?.best_store || 'el supermercado'}</h2>
+        <p className="text-gray-500 dark:text-zinc-400 font-medium animate-pulse text-center px-10">
           Estamos verificando el stock y las ofertas exclusivas para asegurar el máximo ahorro.
         </p>
       </div>
@@ -235,12 +235,12 @@ const ProductDetails: React.FC = () => {
       {/* Pull-to-refresh indicator */}
       {pullY > 0 && (
         <div className="fixed top-0 left-0 right-0 z-50 flex justify-center" style={{ transform: `translateY(${pullY - 40}px)` }}>
-          <div className={`size-9 rounded-full bg-primary flex items-center justify-center shadow-lg transition-transform ${pullY >= PULL_THRESHOLD ? 'scale-110' : 'scale-90'}`}>
-            <span className={`material-symbols-outlined text-background-dark text-lg ${pullRefreshing ? 'animate-spin' : ''}`}>refresh</span>
+          <div className={`size-9 rounded-full bg-black dark:bg-white flex items-center justify-center shadow-lg transition-transform ${pullY >= PULL_THRESHOLD ? 'scale-110' : 'scale-90'}`}>
+            <span className={`material-symbols-outlined text-white dark:text-black text-lg ${pullRefreshing ? 'animate-spin' : ''}`}>refresh</span>
           </div>
         </div>
       )}
-      <header className="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 bg-white dark:bg-black border-b border-gray-100 dark:border-zinc-900">
         <div className="flex items-center p-4 pb-2 justify-between">
           <div
             onClick={() => navigate(-1)}
@@ -277,7 +277,7 @@ const ProductDetails: React.FC = () => {
       <main className="pb-44">
         {/* Image */}
         <div className="px-4 py-2">
-          <div className="w-full bg-white dark:bg-slate-800 rounded-xl overflow-hidden min-h-[320px] shadow-lg flex items-center justify-center p-8">
+          <div className="w-full bg-gray-100 dark:bg-zinc-900 rounded-2xl overflow-hidden min-h-[320px] flex items-center justify-center p-8">
             <img
               src={product.image_url}
               alt={product.name}
@@ -306,7 +306,7 @@ const ProductDetails: React.FC = () => {
                     const isVeryFresh = isValidDate && (new Date().getTime() - latestSync) < 600000; // 10 min
                     
                     return (
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${isVeryFresh ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-amber-500/10 border-amber-500/20 text-amber-500'}`}>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${isVeryFresh ? 'bg-gray-100 dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-500 dark:text-zinc-400' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400'}`}>
                          <span className="material-symbols-outlined text-[14px]">{isVeryFresh ? 'verified' : 'history'}</span>
                          <span className="text-[10px] font-bold uppercase tracking-wider">
                            {!isValidDate ? 'Sinc: Pendiente' : isVeryFresh ? 'Actualizado ahora' : `Verificado ${getRelativeTime(new Date(latestSync).toISOString())}`}
@@ -317,7 +317,7 @@ const ProductDetails: React.FC = () => {
                 </div>
             </div>
             <div className="flex flex-col items-end">
-              <div className="flex items-center gap-1 bg-primary/20 text-primary px-2 py-1 rounded-lg">
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-900 text-gray-500 dark:text-zinc-400 px-2 py-1 rounded-lg">
                 <span className="material-symbols-outlined text-sm fill-1">verified</span>
                 <span className="text-sm font-bold">Match</span>
               </div>
@@ -328,7 +328,7 @@ const ProductDetails: React.FC = () => {
         {/* Price Chart */}
         {(product.price_history && product.price_history.length > 1) && (
           <div className="px-4 py-6">
-            <div className="bg-slate-100 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+            <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Historial de Precios</h3>
                 <span className="text-primary text-xs font-bold flex items-center gap-1">
@@ -361,93 +361,60 @@ const ProductDetails: React.FC = () => {
         {/* AI Intelligence Layer - Insights & Prediction */}
         {product.price_insight && (
           <div className="px-4 py-4 space-y-4">
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#1a2e22] to-[#122319] border border-primary/20 rounded-2xl p-5 shadow-2xl shadow-primary/5">
-              {/* Prediction Banner */}
-              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
-                <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
-                   <span className="material-symbols-outlined text-primary">psychology</span>
+            <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-5">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1 min-w-0 pr-4">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1">Análisis de precio</p>
+                  <h4 className="text-[15px] font-black text-black dark:text-white leading-tight">
+                    {product.price_insight.price_trend === 'falling'
+                      ? 'El precio está bajando'
+                      : product.price_insight.deal_score >= 80
+                      ? '¡Buen momento para comprar!'
+                      : 'Precio estable'}
+                  </h4>
                 </div>
-                <div>
-                   <h4 className="text-[10px] font-black uppercase tracking-tighter text-primary">Predicción de KAIROS</h4>
-                   <p className="text-white text-sm font-bold">
-                     {product.price_insight.price_trend === 'falling' 
-                       ? '🚨 ¡Espera! El precio está bajando.' 
-                       : product.price_insight.deal_score >= 80 
-                       ? '✅ ¡Compra ahora! No bajará más pronto.' 
-                       : '⚖️ Precio estable, puedes comprar hoy.'}
-                   </p>
+                <div className="flex flex-col items-center shrink-0">
+                  <span className="text-[28px] font-black text-primary leading-none">{product.price_insight.deal_score}</span>
+                  <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase">Score</span>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between relative z-10">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="bg-primary/20 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter">Dream System Insight</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-white leading-tight">
-                    {product.price_insight.deal_score >= 80 ? '¡Oferta Excepcional!' : 
-                     product.price_insight.deal_score >= 50 ? 'Buen Momento para Comprar' : 
-                     'Precio Habitual'}
-                  </h3>
-                  <div className="flex items-center gap-4 mt-3">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-slate-500 uppercase font-bold">Tendencia</span>
-                      <div className="flex items-center gap-1">
-                        <span className={`material-symbols-outlined text-sm ${
-                          product.price_insight.price_trend === 'falling' ? 'text-primary' : 
-                          product.price_insight.price_trend === 'rising' ? 'text-red-400' : 'text-slate-400'
-                        }`}>
-                          {product.price_insight.price_trend === 'falling' ? 'trending_down' : 
-                           product.price_insight.price_trend === 'rising' ? 'trending_up' : 'trending_flat'}
-                        </span>
-                        <span className="text-sm font-bold text-slate-300 capitalize">{
-                          product.price_insight.price_trend === 'falling' ? 'Bajando' : 
-                          product.price_insight.price_trend === 'rising' ? 'Subiendo' : 'Estable'
-                        }</span>
-                      </div>
-                    </div>
-                    <div className="h-8 w-px bg-slate-800"></div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-slate-500 uppercase font-bold">Promedio</span>
-                      <span className="text-sm font-bold text-slate-200">{formatCurrency(product.price_insight.avg_price)}</span>
-                    </div>
+              <div className="flex gap-6">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-zinc-500 mb-0.5">Tendencia</p>
+                  <div className="flex items-center gap-1">
+                    <span className={`material-symbols-outlined text-[16px] ${
+                      product.price_insight.price_trend === 'falling' ? 'text-primary' :
+                      product.price_insight.price_trend === 'rising' ? 'text-red-500' : 'text-gray-400'
+                    }`}>
+                      {product.price_insight.price_trend === 'falling' ? 'trending_down' :
+                       product.price_insight.price_trend === 'rising' ? 'trending_up' : 'trending_flat'}
+                    </span>
+                    <span className="text-[13px] font-semibold text-black dark:text-white">
+                      {product.price_insight.price_trend === 'falling' ? 'Bajando' :
+                       product.price_insight.price_trend === 'rising' ? 'Subiendo' : 'Estable'}
+                    </span>
                   </div>
                 </div>
-                
-                {/* Deal Score Radial */}
-                <div className="flex flex-col items-center justify-center size-20 rounded-full border-4 border-slate-800 relative">
-                  <svg className="size-full -rotate-90">
-                    <circle
-                      cx="40" cy="40" r="34"
-                      fill="transparent"
-                      stroke={product.price_insight.deal_score >= 70 ? '#2bee79' : '#f59e0b'}
-                      strokeWidth="4"
-                      strokeDasharray={2 * Math.PI * 34}
-                      strokeDashoffset={2 * Math.PI * 34 * (1 - product.price_insight.deal_score / 100)}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-xl font-black text-white leading-none">{product.price_insight.deal_score}</span>
-                    <span className="text-[8px] font-bold text-slate-500 uppercase">Score</span>
-                  </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-zinc-500 mb-0.5">Promedio</p>
+                  <span className="text-[13px] font-semibold text-black dark:text-white">{formatCurrency(product.price_insight.avg_price)}</span>
                 </div>
               </div>
             </div>
 
             {/* Smart Substitutes */}
             {substitutes.length > 0 && (
-              <div className="bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl p-5">
+              <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-5">
                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
                    <span className="material-symbols-outlined text-[16px] text-primary">swap_horiz</span>
                    Sustitutos de Ahorro
                  </h4>
                  <div className="flex gap-3 overflow-x-scroll no-scrollbar -mx-2 px-2">
                    {substitutes.map(sub => (
-                     <div 
-                      key={sub.id} 
+                     <div
+                      key={sub.id}
                       onClick={() => navigate(`/product/${sub.id}`)}
-                      className="flex-none w-32 bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 cursor-pointer active:scale-95 transition-all"
+                      className="flex-none w-32 bg-white dark:bg-zinc-800 p-3 rounded-xl cursor-pointer active:scale-95 transition-all"
                      >
                         <img src={sub.image_url} alt={sub.name} className="size-16 object-contain mb-2 mx-auto" loading="lazy" />
                         <h5 className="text-[10px] font-bold text-slate-900 dark:text-white truncate">{sub.name}</h5>
@@ -513,16 +480,16 @@ const ProductDetails: React.FC = () => {
                   <div
                     key={`store-${pricePoint.store_id}-p-${pricePoint.price}`}
                     onClick={() => pricePoint.in_stock && setSelectedPricePoint(pricePoint)}
-                    className={`relative overflow-hidden rounded-xl p-4 border-2 transition-all duration-300 ${!pricePoint.in_stock ? 'opacity-60' : 'cursor-pointer active:scale-[0.98]'} ${isSelected && pricePoint.in_stock ? 'bg-primary/10 dark:bg-primary/5 border-primary shadow-lg shadow-primary/5' : 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'}`}
+                    className={`relative overflow-hidden rounded-xl p-4 border-2 transition-all duration-300 ${!pricePoint.in_stock ? 'opacity-60' : 'cursor-pointer active:scale-[0.98]'} ${isSelected && pricePoint.in_stock ? 'bg-gray-50 dark:bg-zinc-900 border-black dark:border-white' : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800'}`}
                   >
                     {isBest && pricePoint.in_stock && (
-                      <div className="absolute top-0 right-0 bg-primary text-background-dark text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase">
+                      <div className="absolute top-0 right-0 bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase">
                         Mejor Precio
                       </div>
                     )}
                     {isSelected && pricePoint.in_stock && (
-                      <div className="absolute top-2 left-2 size-5 rounded-full bg-primary flex items-center justify-center">
-                        <span className="material-symbols-outlined text-background-dark" style={{ fontSize: '14px' }}>check</span>
+                      <div className="absolute top-2 left-2 size-5 rounded-full bg-black dark:bg-white flex items-center justify-center">
+                        <span className="material-symbols-outlined text-white dark:text-black" style={{ fontSize: '14px' }}>check</span>
                       </div>
                     )}
                     <div className="flex items-center justify-between">
@@ -624,7 +591,7 @@ const ProductDetails: React.FC = () => {
                               href={buildStoreSearchUrl(pricePoint.store_slug, product.name)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex-1 flex items-center justify-center gap-1 text-[10px] text-primary font-bold uppercase tracking-widest border border-primary/30 rounded-lg py-1.5 hover:bg-primary/10 transition-colors"
+                              className="flex-1 flex items-center justify-center gap-1 text-[10px] text-black dark:text-white font-bold uppercase tracking-widest border border-gray-200 dark:border-zinc-700 rounded-lg py-1.5 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
                             >
                               <span className="material-symbols-outlined text-[13px]">search</span>
                               Buscar en tienda
@@ -657,7 +624,7 @@ const ProductDetails: React.FC = () => {
         const displayPrice = pp?.price ?? product.best_price;
         const displayStore = pp?.store_name ?? product.best_store;
         return (
-          <div className="fixed bottom-20 left-0 right-0 z-30 p-4 bg-white/90 dark:bg-[#102217]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800">
+          <div className="fixed bottom-20 left-0 right-0 z-30 p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-zinc-900">
             <div className="max-w-md mx-auto flex items-center gap-4">
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-1.5 mb-0.5">
@@ -678,7 +645,7 @@ const ProductDetails: React.FC = () => {
                     ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                     : isInCart(product.id)
                     ? 'bg-red-500 text-white shadow-red-500/20 active:scale-95'
-                    : 'bg-primary text-background-dark shadow-primary/20 active:scale-95'
+                    : 'bg-black dark:bg-white text-white dark:text-black active:scale-95'
                 }`}
               >
                 <span className="material-symbols-outlined">

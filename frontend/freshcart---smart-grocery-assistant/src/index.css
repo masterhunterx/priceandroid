@@ -10,18 +10,18 @@
 
 :root {
   --primary: #00f076;
-  --background-light: #f8f9fb;
-  --background-dark: #060913;
+  --background-light: #ffffff;
+  --background-dark: #000000;
 
   /* Store theme defaults (FreshCart green) */
   --store-primary: #00f076;
   --store-primary-text: #000000;
-  --store-bg-dark: #060913;
-  --store-bg-light: #f8f9fb;
-  --store-surface-dark: #0d1326;
-  --store-surface-darker: #0a0f1d;
-  --store-header-bg-dark: rgba(6,9,19,0.85);
-  --store-header-bg-light: rgba(248,249,251,0.88);
+  --store-bg-dark: #000000;
+  --store-bg-light: #ffffff;
+  --store-surface-dark: #111111;
+  --store-surface-darker: #0a0a0a;
+  --store-header-bg-dark: rgba(0,0,0,0.95);
+  --store-header-bg-light: rgba(255,255,255,0.95);
   --store-nav-bg-dark: rgba(10,15,29,0.80);
   --store-gradient: rgba(0,240,118,0.10);
 }

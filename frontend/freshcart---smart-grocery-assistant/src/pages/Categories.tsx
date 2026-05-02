@@ -51,19 +51,19 @@ const Categories: React.FC = () => {
   const restCategories = categories.slice(4);
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-background-dark">
+    <div className="flex flex-col min-h-screen bg-white dark:bg-black">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md border-b border-slate-100 dark:border-white/10">
+      <header className="sticky top-0 z-50 bg-white dark:bg-black border-b border-gray-100 dark:border-zinc-900">
         <div className="flex items-center gap-3 p-4">
           <button
             onClick={() => navigate(-1)}
-            className="size-9 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800"
+            className="size-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-zinc-900"
           >
-            <span className="material-symbols-outlined text-slate-700 dark:text-white text-[20px]">arrow_back_ios</span>
+            <span className="material-symbols-outlined text-black dark:text-white text-[20px]">arrow_back_ios</span>
           </button>
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-white">Categorías</h1>
-            <p className="text-xs text-slate-400">{categories.length} departamentos disponibles</p>
+            <h1 className="text-lg font-black text-black dark:text-white">Categorías</h1>
+            <p className="text-xs text-gray-400 dark:text-zinc-500">{categories.length} departamentos disponibles</p>
           </div>
         </div>
         {/* Filtro de tienda */}
@@ -80,20 +80,20 @@ const Categories: React.FC = () => {
               <button
                 key={label}
                 onClick={() => setSelectedStore(value)}
-                className="h-8 px-3 rounded-full text-xs font-bold shrink-0 transition-colors"
+                className={`h-8 px-3 rounded-full text-xs font-bold shrink-0 transition-colors ${
+                  active
+                    ? ''
+                    : 'bg-gray-100 dark:bg-zinc-900 text-black dark:text-white'
+                }`}
                 style={
                   active
                     ? {
                         border: `2px solid ${color}`,
-                        background: `${color}26`,
+                        background: `${color}20`,
                         color,
                       }
                     : undefined
                 }
-                {...(!active && {
-                  className:
-                    'h-8 px-3 rounded-full text-xs font-bold shrink-0 transition-colors border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-600 dark:text-slate-300',
-                })}
               >
                 {label}
               </button>
@@ -102,37 +102,42 @@ const Categories: React.FC = () => {
         </div>
       </header>
 
-      <main className="p-4 flex-1 space-y-6">
+      <main className="flex-1">
         {loading ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="p-4">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-32 rounded-2xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
+              <div key={i} className={`flex items-center gap-4 px-5 py-4 animate-pulse ${i < 7 ? 'border-b border-gray-100 dark:border-zinc-900' : ''}`}>
+                <div className="size-10 rounded-xl bg-gray-100 dark:bg-zinc-900 shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-32 bg-gray-100 dark:bg-zinc-900 rounded" />
+                  <div className="h-2.5 w-20 bg-gray-100 dark:bg-zinc-900 rounded" />
+                </div>
+              </div>
             ))}
           </div>
         ) : (
           <>
-            {/* Featured — top 4 en grid 2x2 grande */}
+            {/* Featured — top 4 */}
             {featuredCategories.length > 0 && (
-              <section>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Más populares</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {featuredCategories.map(cat => (
+              <section className="py-5">
+                <p className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest px-5 mb-3">Más populares</p>
+                <div>
+                  {featuredCategories.map((cat, idx) => (
                     <button
                       key={cat.name}
                       onClick={() => navToCategory(cat.name)}
-                      className="relative overflow-hidden rounded-2xl p-4 text-left active:scale-95 transition-transform"
-                      style={{ background: `${cat.color}18`, border: `1.5px solid ${cat.color}30` }}
+                      className={`w-full flex items-center gap-4 px-5 py-4 active:bg-gray-50 dark:active:bg-zinc-900 transition-colors text-left ${
+                        idx < featuredCategories.length - 1 ? 'border-b border-gray-100 dark:border-zinc-900' : ''
+                      }`}
                     >
-                      <span className="text-4xl block mb-2">{cat.emoji}</span>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{cat.name}</p>
-                      <p className="text-xs mt-1 font-medium" style={{ color: cat.color }}>
-                        {cat.product_count.toLocaleString()} productos
-                      </p>
-                      {/* Decorative circle */}
-                      <div
-                        className="absolute -right-4 -bottom-4 w-16 h-16 rounded-full opacity-20"
-                        style={{ background: cat.color }}
-                      />
+                      <div className="size-10 rounded-xl bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-xl flex-shrink-0">
+                        {cat.emoji}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[15px] font-bold text-black dark:text-white truncate">{cat.name}</p>
+                        <p className="text-[12px] text-gray-400 dark:text-zinc-500">{cat.product_count.toLocaleString()} productos</p>
+                      </div>
+                      <span className="material-symbols-outlined text-gray-300 dark:text-zinc-700 text-[18px]">chevron_right</span>
                     </button>
                   ))}
                 </div>
@@ -141,29 +146,26 @@ const Categories: React.FC = () => {
 
             {/* Rest — lista compacta */}
             {restCategories.length > 0 && (
-              <section>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Todos los departamentos</p>
-                <div className="bg-white dark:bg-[#161f1a] rounded-2xl border border-slate-100 dark:border-white/5 overflow-hidden">
+              <section className="pb-5">
+                <div className="h-px bg-gray-100 dark:bg-zinc-900" />
+                <p className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest px-5 py-4">Todos los departamentos</p>
+                <div>
                   {restCategories.map((cat, idx) => (
                     <button
                       key={cat.name}
                       onClick={() => navToCategory(cat.name)}
-                      className={`w-full flex items-center gap-4 px-4 py-3.5 active:bg-slate-50 dark:active:bg-white/5 transition-colors text-left ${
-                        idx < restCategories.length - 1 ? 'border-b border-slate-100 dark:border-white/5' : ''
+                      className={`w-full flex items-center gap-4 px-5 py-3.5 active:bg-gray-50 dark:active:bg-zinc-900 transition-colors text-left ${
+                        idx < restCategories.length - 1 ? 'border-b border-gray-100 dark:border-zinc-900' : ''
                       }`}
                     >
-                      {/* Color dot + emoji */}
-                      <div
-                        className="size-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-                        style={{ background: `${cat.color}18` }}
-                      >
+                      <div className="size-10 rounded-xl bg-gray-100 dark:bg-zinc-900 flex items-center justify-center text-xl flex-shrink-0">
                         {cat.emoji}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{cat.name}</p>
-                        <p className="text-xs text-slate-400">{cat.product_count.toLocaleString()} productos</p>
+                        <p className="text-[14px] font-semibold text-black dark:text-white truncate">{cat.name}</p>
+                        <p className="text-[12px] text-gray-400 dark:text-zinc-500">{cat.product_count.toLocaleString()} productos</p>
                       </div>
-                      <span className="material-symbols-outlined text-slate-300 text-[18px]">chevron_right</span>
+                      <span className="material-symbols-outlined text-gray-300 dark:text-zinc-700 text-[18px]">chevron_right</span>
                     </button>
                   ))}
                 </div>
