@@ -328,7 +328,7 @@ def get_search_suggestions(
 
     q_clean = _strip_accents(q.strip().lower())
 
-    def _query_rows(session, filter_store: Optional[str], limit: int):
+    def _query_rows(session, filter_store: Optional[str], limit: int, in_stock_only: bool = True):
         base_q = (
             session.query(
                 StoreProduct.name,
@@ -340,23 +340,30 @@ def get_search_suggestions(
             )
             .join(Store)
             .outerjoin(ProductMatch, ProductMatch.store_product_id == StoreProduct.id)
-            .filter(StoreProduct.in_stock == True)
         )
+        if in_stock_only:
+            base_q = base_q.filter(StoreProduct.in_stock == True)
         base_q = _build_text_filter(base_q, q)
         if filter_store:
             base_q = base_q.filter(Store.slug == filter_store)
         return base_q.limit(limit).all()
 
     with get_session() as session:
-        # Primero busca en la tienda seleccionada
-        rows = _query_rows(session, store, 20) if store else []
+        # Primero busca en la tienda seleccionada (in_stock)
+        rows = _query_rows(session, store, 60) if store else []
 
-        # Si hay pocos resultados (<3 productos), completa con todas las tiendas
+        # Si hay pocos resultados, completa con todas las tiendas (in_stock)
         if len(rows) < 3:
-            all_rows = _query_rows(session, None, 20)
-            # Pone las filas de la tienda seleccionada primero, luego las demás sin duplicar
+            all_rows = _query_rows(session, None, 60)
             store_names_seen = {r[0].strip().lower() for r in rows}
             extra = [r for r in all_rows if r[0].strip().lower() not in store_names_seen]
+            rows = rows + extra
+
+        # Último recurso: incluir productos sin stock si aún hay muy pocos resultados
+        if len(rows) < 3:
+            all_rows_any = _query_rows(session, None, 60, in_stock_only=False)
+            store_names_seen = {r[0].strip().lower() for r in rows}
+            extra = [r for r in all_rows_any if r[0].strip().lower() not in store_names_seen]
             rows = rows + extra
 
         seen_names  = set()
@@ -377,7 +384,8 @@ def get_search_suggestions(
                 })
                 seen_names.add(key)
 
-            if brand and _strip_accents(brand.lower()).startswith(q_clean):
+            # Sugerir marca si la búsqueda está contenida en el nombre de la marca
+            if brand and q_clean in _strip_accents(brand.lower()):
                 bkey = brand.strip().lower()
                 if bkey not in seen_brands:
                     results.append({
@@ -390,7 +398,7 @@ def get_search_suggestions(
                     })
                     seen_brands.add(bkey)
 
-        return UnifiedResponse(data=results[:8])
+        return UnifiedResponse(data=results[:10])
 
 @router.get("/{product_id}", response_model=UnifiedResponse)
 def get_product(
