@@ -1,21 +1,21 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# FreshCart ProGuard rules
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Capacitor WebView bridge — debe quedar intacto
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Firebase Auth — evitar obfuscar clases de autenticación
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Facebook SDK — no está incluido, ignorar referencias missing
+-dontwarn com.facebook.**
+-keep class com.facebook.** { *; }
+
+# Capacitor Firebase Authentication plugin
+-keep class io.capawesome.capacitorjs.plugins.firebase.** { *; }
+
+# Mantener nombres de clases para stack traces legibles
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
