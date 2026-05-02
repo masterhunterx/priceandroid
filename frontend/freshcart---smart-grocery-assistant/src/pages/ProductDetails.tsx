@@ -248,7 +248,9 @@ const ProductDetails: React.FC = () => {
           >
             <span className="material-symbols-outlined text-2xl">arrow_back_ios</span>
           </div>
-          <h2 className="text-lg font-bold flex-1 text-center">Detalle del Producto</h2>
+          <h2 className="text-sm font-bold flex-1 text-center truncate px-2 text-slate-900 dark:text-white">
+            {product ? (product.brand || product.name.split(' ').slice(0, 3).join(' ')) : 'Detalle'}
+          </h2>
           <div className="flex w-12 items-center justify-end">
             <button
               onClick={handleToggleFavorite}
@@ -467,7 +469,7 @@ const ProductDetails: React.FC = () => {
         <div className="px-4 mt-6">
           <div className="flex justify-between items-end mb-4">
             <h3 className="text-lg font-bold leading-tight tracking-tight">Comparar en Tiendas</h3>
-            <button 
+            <button
               onClick={handleSync}
               disabled={syncing}
               className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-primary hover:opacity-80 transition-all ${syncing ? 'animate-pulse' : ''}`}
@@ -476,6 +478,25 @@ const ProductDetails: React.FC = () => {
               {syncing ? 'Verificando...' : 'Verificar Ahora'}
             </button>
           </div>
+
+          {/* Banner de datos desactualizados */}
+          {product.prices?.some(p => p.is_stale) && (
+            <div className="mb-4 flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
+              <span className="material-symbols-outlined text-amber-500 text-[20px] shrink-0 mt-0.5">warning</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-amber-600 dark:text-amber-400 text-xs font-bold">Precios posiblemente desactualizados</p>
+                <p className="text-amber-500/80 text-[11px] mt-0.5">Algunos datos tienen más de 6h. Toca <span className="font-bold">Verificar Ahora</span> para refrescar.</p>
+              </div>
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="shrink-0 bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg active:scale-95 transition-all"
+              >
+                {syncing ? '...' : 'Actualizar'}
+              </button>
+            </div>
+          )}
+
           <div className="space-y-3">
             {(product.prices ?? [])
               .sort((a, b) => {
@@ -638,12 +659,15 @@ const ProductDetails: React.FC = () => {
         return (
           <div className="fixed bottom-20 left-0 right-0 z-30 p-4 bg-white/90 dark:bg-[#102217]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800">
             <div className="max-w-md mx-auto flex items-center gap-4">
-              <div className="flex flex-col">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">
-                  {hasStock ? (displayStore || 'Mejor Precio') : 'Stock'}
-                </span>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  {pp && <StoreLogo slug={pp.store_slug} name={pp.store_name} className="size-4" />}
+                  <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider truncate">
+                    {hasStock ? (displayStore || 'Mejor Precio') : 'Sin Stock'}
+                  </span>
+                </div>
                 <span className={`text-2xl font-bold ${hasStock ? 'text-primary' : 'text-red-500'}`}>
-                  {hasStock ? formatCurrency(displayPrice) : 'Sin Stock'}
+                  {hasStock ? formatCurrency(displayPrice) : '—'}
                 </span>
               </div>
               <button

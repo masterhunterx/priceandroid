@@ -30,7 +30,7 @@ const CATEGORY_SEARCH_OVERRIDES: Record<string, string> = {
 
 const Categories: React.FC = () => {
   const navigate = useNavigate();
-  const { selectedStore } = useLocation();
+  const { selectedStore, setSelectedStore } = useLocation();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,6 +65,40 @@ const Categories: React.FC = () => {
             <h1 className="text-lg font-bold text-slate-900 dark:text-white">Categorías</h1>
             <p className="text-xs text-slate-400">{categories.length} departamentos disponibles</p>
           </div>
+        </div>
+        {/* Filtro de tienda */}
+        <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
+          {[
+            { label: 'Todas',    value: null,       color: '#00f076' },
+            { label: 'Jumbo',    value: 'jumbo',    color: '#00a650' },
+            { label: 'Líder',    value: 'lider',    color: '#0071ce' },
+            { label: 'Unimarc', value: 'unimarc',  color: '#da291c' },
+            { label: 'S. Isabel', value: 'santaisabel', color: '#e30613' },
+          ].map(({ label, value, color }) => {
+            const active = (selectedStore ?? null) === value;
+            return (
+              <button
+                key={label}
+                onClick={() => setSelectedStore(value)}
+                className="h-8 px-3 rounded-full text-xs font-bold shrink-0 transition-colors"
+                style={
+                  active
+                    ? {
+                        border: `2px solid ${color}`,
+                        background: `${color}26`,
+                        color,
+                      }
+                    : undefined
+                }
+                {...(!active && {
+                  className:
+                    'h-8 px-3 rounded-full text-xs font-bold shrink-0 transition-colors border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-600 dark:text-slate-300',
+                })}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </header>
 
