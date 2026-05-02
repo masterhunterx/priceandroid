@@ -23,6 +23,7 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel, EmailStr
 from ..schemas import UnifiedResponse
+from core.shield import Shield3
 
 # H1 — Pre-computar hash dummy para normalizar timing en usuarios inexistentes.
 # bcrypt checkpw tarda ~80-150ms; sin esto, usuarios inexistentes responden en <1ms
@@ -1074,6 +1075,75 @@ def firebase_login(body: FirebaseLoginRequest, request: Request):
     except Exception as e:
         logger.error(f"[AUTH] Error en firebase-login: {e}")
         raise HTTPException(status_code=500, detail="Error procesando login de Firebase.")
+
+
+@router.get("/admin/shield/blocked-ips", response_model=UnifiedResponse)
+def list_blocked_ips(request: Request):
+    """Lista todas las IPs bloqueadas por Shield (requiere X-Admin-Key, bypass de IP block)."""
+    req_key = request.headers.get("X-Admin-Key", "")
+    if not ADMIN_APPROVE_KEY or not req_key or req_key != ADMIN_APPROVE_KEY:
+        raise HTTPException(status_code=403, detail="X-Admin-Key inválida.")
+    try:
+        from core.db import get_session
+        from core.models import BlockedIP
+        with get_session() as db:
+            blocked = db.query(BlockedIP).order_by(BlockedIP.blocked_at.desc()).all()
+            return UnifiedResponse(data={
+                "blocked_ips": [
+                    {"id": b.id, "ip": b.ip, "reason": b.reason, "blocked_at": b.blocked_at.isoformat()}
+                    for b in blocked
+                ],
+                "total": len(blocked),
+                "cache_size": len(Shield3.BLOCKED_IPS_CACHE),
+            })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listando IPs: {e}")
+
+
+@router.delete("/admin/shield/blocked-ips/{ip}", response_model=UnifiedResponse)
+def unblock_ip(ip: str, request: Request):
+    """Desbloquea una IP en Shield (requiere X-Admin-Key, bypass de IP block)."""
+    req_key = request.headers.get("X-Admin-Key", "")
+    if not ADMIN_APPROVE_KEY or not req_key or req_key != ADMIN_APPROVE_KEY:
+        raise HTTPException(status_code=403, detail="X-Admin-Key inválida.")
+    try:
+        from core.db import get_session
+        from core.models import BlockedIP
+        with get_session() as db:
+            entry = db.query(BlockedIP).filter(BlockedIP.ip == ip).first()
+            if not entry:
+                raise HTTPException(status_code=404, detail=f"IP '{ip}' no está bloqueada.")
+            db.delete(entry)
+        with Shield3._lock:
+            Shield3.BLOCKED_IPS_CACHE.discard(ip)
+        Shield3.LAST_CACHE_SYNC = 0  # fuerza re-sync en próxima request
+        logger.info(f"[SHIELD] IP desbloqueada manualmente: {ip}")
+        return UnifiedResponse(data={"message": f"IP '{ip}' desbloqueada correctamente."})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error desbloqueando IP: {e}")
+
+
+@router.delete("/admin/shield/blocked-ips", response_model=UnifiedResponse)
+def clear_all_blocked_ips(request: Request):
+    """Limpia TODAS las IPs bloqueadas en Shield (requiere X-Admin-Key)."""
+    req_key = request.headers.get("X-Admin-Key", "")
+    if not ADMIN_APPROVE_KEY or not req_key or req_key != ADMIN_APPROVE_KEY:
+        raise HTTPException(status_code=403, detail="X-Admin-Key inválida.")
+    try:
+        from core.db import get_session
+        from core.models import BlockedIP
+        with get_session() as db:
+            count = db.query(BlockedIP).count()
+            db.query(BlockedIP).delete()
+        with Shield3._lock:
+            Shield3.BLOCKED_IPS_CACHE.clear()
+        Shield3.LAST_CACHE_SYNC = 0
+        logger.info(f"[SHIELD] Se desbloquearon {count} IPs por admin.")
+        return UnifiedResponse(data={"message": f"{count} IPs desbloqueadas.", "count": count})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error limpiando IPs: {e}")
 
 
 @router.get("/sessions", response_model=UnifiedResponse)

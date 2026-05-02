@@ -149,6 +149,16 @@ async def shield_security_middleware(request: Request, call_next):
                 return JSONResponse(status_code=403, content={"error": "Forbidden"})
         return await call_next(request)
 
+    # /api/auth/admin/shield — gestión de Shield; bypass de IP block para permitir desbloqueo
+    # Requiere ADMIN_APPROVE_KEY en header X-Admin-Key (sin JWT, para casos donde admin está bloqueado)
+    _ADMIN_KEY = os.environ.get("ADMIN_APPROVE_KEY", "")
+    if path.startswith("/api/auth/admin/shield") and _ADMIN_KEY:
+        req_key = request.headers.get("X-Admin-Key", "")
+        import hmac as _hmac_admin
+        if _hmac_admin.compare_digest(req_key, _ADMIN_KEY):
+            return await call_next(request)
+        return JSONResponse(status_code=403, content={"error": "X-Admin-Key inválida."})
+
     ip = _get_real_ip(request)
 
     # 1. Blacklist Check
