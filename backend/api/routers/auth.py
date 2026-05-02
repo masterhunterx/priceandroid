@@ -539,6 +539,21 @@ def approval_status(username: str, request: Request):
     return {"approved": approval["approved"], "pending": not approval["approved"]}
 
 
+@router.get("/guest-token", response_model=UnifiedResponse)
+def guest_token(request: Request):
+    """JWT de lectura para modo invitado — permite browsing sin cuenta."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Demasiados intentos.")
+    token = _create_token("guest", "access", timedelta(hours=24))
+    return UnifiedResponse(data={
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": 86400,
+        "role": "guest",
+    })
+
+
 @router.post("/logout", response_model=UnifiedResponse)
 def logout_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     if credentials:

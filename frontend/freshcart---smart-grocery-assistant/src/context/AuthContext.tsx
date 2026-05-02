@@ -134,7 +134,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return 'ok';
   }, []);
 
-  const enterGuestMode = useCallback(() => {
+  const enterGuestMode = useCallback(async () => {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/auth/guest-token`);
+      const json = await resp.json();
+      const guestToken = json.data?.access_token;
+      if (guestToken) localStorage.setItem(ACCESS_KEY, guestToken);
+    } catch { /* sin conexión — igual entra como invitado, algunos features fallarán */ }
     localStorage.setItem(GUEST_KEY, '1');
     setIsGuest(true);
   }, []);
