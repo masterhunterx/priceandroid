@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { registerUser, googleLogin, firebaseLogin, forgotPassword, resetPassword } from '../lib/api';
+import { googleLogin, firebaseLogin, forgotPassword, resetPassword } from '../lib/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -20,7 +20,7 @@ declare global {
   }
 }
 
-type View = 'login' | 'register' | 'forgot' | 'reset';
+type View = 'login' | 'forgot' | 'reset';
 
 const Login: React.FC = () => {
   const { login, setSession } = useAuth();
@@ -39,15 +39,6 @@ const Login: React.FC = () => {
   const [pendingUser, setPendingUser] = useState('');
   const [pendingPwd, setPendingPwd] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Register ───────────────────────────────────────────────────────────────
-  const [regUsername, setRegUsername] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [showRegPwd, setShowRegPwd] = useState(false);
-  const [regLoading, setRegLoading] = useState(false);
-  const [regError, setRegError] = useState('');
-  const [regSuccess, setRegSuccess] = useState(false);
 
   // ── Forgot password ────────────────────────────────────────────────────────
   const [forgotEmail, setForgotEmail] = useState('');
@@ -110,7 +101,7 @@ const Login: React.FC = () => {
   };
 
   useEffect(() => {
-    if (view !== 'login' && view !== 'register') return;
+    if (view !== 'login') return;
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     const native = !!(window as any).Capacitor?.isNativePlatform?.();
     if (!clientId || native) return;
@@ -170,21 +161,6 @@ const Login: React.FC = () => {
       setLoginError(err.message || 'Error al iniciar sesión');
     } finally {
       setLoginLoading(false);
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!regUsername || !regPassword) return;
-    setRegLoading(true);
-    setRegError('');
-    try {
-      await registerUser(regUsername, regPassword, regEmail || undefined);
-      setRegSuccess(true);
-    } catch (err: any) {
-      setRegError(err.message || 'Error al registrarse');
-    } finally {
-      setRegLoading(false);
     }
   };
 
@@ -380,19 +356,6 @@ const Login: React.FC = () => {
       <Header />
 
       <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 p-7">
-        {/* Tabs */}
-        <div className="flex mb-6 bg-slate-100 dark:bg-slate-900 rounded-2xl p-1">
-          {(['login', 'register'] as const).map(tab => (
-            <button key={tab} onClick={() => setView(tab)}
-              className={`flex-1 h-9 rounded-xl text-sm font-semibold transition-all ${
-                view === tab
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}>
-              {tab === 'login' ? 'Iniciar sesión' : 'Registrarse'}
-            </button>
-          ))}
-        </div>
 
         {/* Google Sign-In — web (GSI) */}
         {hasWebGoogle && (
@@ -456,47 +419,6 @@ const Login: React.FC = () => {
           </form>
         )}
 
-        {/* ── REGISTER FORM ── */}
-        {view === 'register' && (
-          <>
-            {regSuccess ? (
-              <div className="flex flex-col items-center gap-4 text-center py-2">
-                <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-amber-500 text-[32px]">hourglass_top</span>
-                </div>
-                <div>
-                  <h3 className="text-slate-900 dark:text-white font-bold mb-1">¡Cuenta creada!</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">
-                    Tu cuenta está pendiente de aprobación del administrador. Te avisaremos pronto.
-                  </p>
-                </div>
-                <button onClick={() => setView('login')}
-                  className="text-primary hover:text-primary/80 text-sm font-semibold transition-colors">
-                  Volver al inicio de sesión
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleRegister} className="flex flex-col gap-4">
-                <TextField icon="person" label="Usuario" value={regUsername} onChange={setRegUsername}
-                  placeholder="mi_usuario" autoComplete="username" />
-                <TextField icon="mail" label="Email (opcional)" value={regEmail} onChange={setRegEmail}
-                  placeholder="tu@email.com" autoComplete="email" type="email" />
-                <PasswordField label="Contraseña" value={regPassword} onChange={setRegPassword}
-                  show={showRegPwd} onToggle={() => setShowRegPwd(v => !v)} placeholder="Mín. 8 caracteres" />
-                {regError && <ErrorBox msg={regError} />}
-                <button type="submit" disabled={regLoading || !regUsername || !regPassword}
-                  className="h-12 w-full bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-background-dark font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary/20 mt-1">
-                  {regLoading
-                    ? <><span className="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>Creando cuenta...</>
-                    : <><span className="material-symbols-outlined text-[20px]">person_add</span>Crear cuenta</>}
-                </button>
-                <p className="text-xs text-slate-400 text-center">
-                  La cuenta requiere aprobación del administrador antes de poder ingresar.
-                </p>
-              </form>
-            )}
-          </>
-        )}
       </div>
 
       <p className="mt-6 text-center text-slate-400 text-[11px]">
