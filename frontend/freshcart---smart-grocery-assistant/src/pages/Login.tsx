@@ -19,8 +19,8 @@ declare global {
   }
 }
 
-const GoogleLogo = () => (
-  <svg width="20" height="20" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+const GoogleLogo = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
     <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
     <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
@@ -152,69 +152,69 @@ const Login: React.FC = () => {
     }
   };
 
+  // ── Espera admin ───────────────────────────────────────────────────────────
   if (pendingUser) {
     return (
-      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center px-6">
-        <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8 flex flex-col items-center gap-5 text-center">
-          <span className="material-symbols-outlined text-amber-500 text-[48px]">hourglass_top</span>
-          <div>
-            <h2 className="text-slate-900 dark:text-white text-xl font-bold mb-1">Verificando acceso</h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">Comprobando permisos de administrador…</p>
+      <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="w-12 h-12 rounded-full border-2 border-slate-200 dark:border-zinc-700 flex items-center justify-center">
+            <span className="material-symbols-outlined text-slate-400 text-[20px] animate-spin">progress_activity</span>
           </div>
-          <div className="flex items-center gap-2 text-slate-400 text-xs">
-            <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
-            Espera un momento
-          </div>
+          <p className="text-slate-500 dark:text-zinc-400 text-sm">Verificando acceso…</p>
           <button onClick={() => { setPendingUser(''); setPendingPwd(''); }}
-            className="text-slate-400 text-sm hover:text-slate-600 transition-colors">Cancelar</button>
+            className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
         </div>
       </div>
     );
   }
 
-  // ── Modal info invitado ────────────────────────────────────────────────────
+  // ── Sheet: info invitado ───────────────────────────────────────────────────
   if (showGuestInfo) {
+    const features = [
+      { label: 'Buscar y comparar precios',                    ok: true },
+      { label: 'Ver productos de todos los supermercados',     ok: true },
+      { label: 'Carrito guardado en este dispositivo',         ok: true },
+      { label: 'Favoritos y alertas de precio',                ok: false },
+      { label: 'Historial y sincronización entre dispositivos',ok: false },
+    ];
     return (
-      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-end justify-center">
-        <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-t-3xl px-6 pt-6 pb-10 shadow-2xl">
-          <div className="w-10 h-1 bg-slate-200 dark:bg-slate-600 rounded-full mx-auto mb-6" />
-
+      <div className="min-h-screen bg-black/40 flex items-end justify-center" onClick={() => setShowGuestInfo(false)}>
+        <div
+          className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-t-2xl px-6 pt-5 pb-10"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="w-8 h-1 bg-slate-200 dark:bg-zinc-700 rounded-full mx-auto mb-6" />
           <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Modo explorador</h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
-            Puedes revisar precios y comparar sin crear cuenta. Algunas funciones requieren Google.
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mb-6">
+            Puedes buscar y comparar sin crear cuenta.
           </p>
-
-          <div className="flex flex-col gap-3 mb-7">
-            {[
-              { icon: 'search', label: 'Buscar y comparar precios', ok: true },
-              { icon: 'storefront', label: 'Ver productos de todos los supermercados', ok: true },
-              { icon: 'shopping_cart', label: 'Carrito de compras (guardado en este dispositivo)', ok: true },
-              { icon: 'favorite', label: 'Favoritos y alertas de precio', ok: false },
-              { icon: 'sync', label: 'Sincronizar entre dispositivos', ok: false },
-            ].map(({ icon, label, ok }) => (
+          <div className="flex flex-col gap-3 mb-8">
+            {features.map(({ label, ok }) => (
               <div key={label} className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${ok ? 'bg-green-100 dark:bg-green-900/30' : 'bg-slate-100 dark:bg-slate-700'}`}>
-                  <span className={`material-symbols-outlined text-[16px] ${ok ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>{ok ? 'check' : 'lock'}</span>
-                </div>
-                <span className={`text-sm ${ok ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400'}`}>{label}</span>
+                <span className={`material-symbols-outlined text-[18px] ${ok ? 'text-green-500' : 'text-slate-300 dark:text-zinc-600'}`}>
+                  {ok ? 'check_circle' : 'lock'}
+                </span>
+                <span className={`text-sm ${ok ? 'text-slate-800 dark:text-zinc-100' : 'text-slate-400 dark:text-zinc-500'}`}>
+                  {label}
+                </span>
               </div>
             ))}
           </div>
-
           <button
             onClick={handleEnterGuest}
             disabled={guestLoading}
-            className="w-full h-12 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-2xl flex items-center justify-center gap-2 mb-3 active:scale-95 transition-all disabled:opacity-50"
+            className="w-full h-12 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-semibold rounded-xl flex items-center justify-center gap-2 mb-3 active:scale-[0.98] transition-all disabled:opacity-50 text-sm"
           >
             {guestLoading
-              ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Cargando...</>
-              : <><span className="material-symbols-outlined text-[18px]">explore</span>Continuar sin cuenta</>}
+              ? <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+              : <span className="material-symbols-outlined text-[18px]">explore</span>}
+            {guestLoading ? 'Cargando...' : 'Continuar sin cuenta'}
           </button>
           <button
             onClick={() => setShowGuestInfo(false)}
-            className="w-full h-12 bg-primary text-background-dark font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all"
+            className="w-full h-12 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all text-sm"
           >
-            <GoogleLogo />
+            <GoogleLogo size={16} />
             Conectar con Google
           </button>
         </div>
@@ -222,48 +222,44 @@ const Login: React.FC = () => {
     );
   }
 
-  // ── Modal admin ────────────────────────────────────────────────────────────
+  // ── Sheet: admin ───────────────────────────────────────────────────────────
   if (showAdmin) {
     return (
-      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-end justify-center">
-        <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-t-3xl px-6 pt-6 pb-10 shadow-2xl">
-          <div className="w-10 h-1 bg-slate-200 dark:bg-slate-600 rounded-full mx-auto mb-6" />
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-slate-400 text-[20px]">admin_panel_settings</span>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Acceso administrador</h2>
-            </div>
+      <div className="min-h-screen bg-black/40 flex items-end justify-center" onClick={() => setShowAdmin(false)}>
+        <div
+          className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-t-2xl px-6 pt-5 pb-10"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="w-8 h-1 bg-slate-200 dark:bg-zinc-700 rounded-full mx-auto mb-6" />
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Administrador</h2>
             <button onClick={() => setShowAdmin(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-              <span className="material-symbols-outlined text-[22px]">close</span>
+              <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
           <form onSubmit={handleLogin} className="flex flex-col gap-3">
-            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-4 h-12 focus-within:border-primary transition-colors">
-              <span className="material-symbols-outlined text-slate-400 text-[20px]">person</span>
-              <input type="text" value={username} onChange={e => setUsername(e.target.value)}
-                placeholder="Usuario" autoComplete="username"
-                className="flex-1 bg-transparent text-slate-900 dark:text-white text-sm focus:outline-none placeholder:text-slate-400" />
-            </div>
-            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-4 h-12 focus-within:border-primary transition-colors">
-              <span className="material-symbols-outlined text-slate-400 text-[20px]">lock</span>
-              <input type={showPwd ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+            <input
+              type="text" value={username} onChange={e => setUsername(e.target.value)}
+              placeholder="Usuario" autoComplete="username"
+              className="w-full h-12 px-4 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-slate-400 dark:focus:border-zinc-500 transition-colors"
+            />
+            <div className="relative">
+              <input
+                type={showPwd ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                 placeholder="Contraseña" autoComplete="current-password"
-                className="flex-1 bg-transparent text-slate-900 dark:text-white text-sm focus:outline-none placeholder:text-slate-400" />
-              <button type="button" onClick={() => setShowPwd(v => !v)} className="text-slate-400 hover:text-primary transition-colors">
-                <span className="material-symbols-outlined text-[20px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
+                className="w-full h-12 px-4 pr-12 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-slate-400 dark:focus:border-zinc-500 transition-colors"
+              />
+              <button type="button" onClick={() => setShowPwd(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
               </button>
             </div>
-            {loginError && (
-              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl px-4 py-3">
-                <span className="material-symbols-outlined text-red-500 text-[18px]">error</span>
-                <p className="text-red-600 dark:text-red-400 text-sm">{loginError}</p>
-              </div>
-            )}
+            {loginError && <p className="text-red-500 text-xs px-1">{loginError}</p>}
             <button type="submit" disabled={loginLoading || !username || !password}
-              className="h-12 w-full bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 disabled:opacity-40 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 mt-1">
+              className="h-12 w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 text-sm mt-1">
               {loginLoading
-                ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Verificando...</>
-                : <><span className="material-symbols-outlined text-[18px]">login</span>Entrar</>}
+                ? <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                : 'Entrar'}
             </button>
           </form>
         </div>
@@ -273,66 +269,60 @@ const Login: React.FC = () => {
 
   // ── Vista principal ────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark flex flex-col items-center justify-center px-6 relative">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 flex flex-col px-6 relative">
 
       {/* Gear admin — bottom left */}
       <button
         onClick={() => setShowAdmin(true)}
-        className="absolute bottom-6 left-6 w-10 h-10 flex items-center justify-center text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors"
-        aria-label="Acceso administrador"
+        className="absolute bottom-8 left-6 text-slate-200 dark:text-zinc-800 hover:text-slate-400 dark:hover:text-zinc-600 transition-colors"
+        aria-label="Administrador"
       >
-        <span className="material-symbols-outlined text-[24px]">settings</span>
+        <span className="material-symbols-outlined text-[22px]">settings</span>
       </button>
 
-      {/* Logo */}
-      <div className="mb-10 flex flex-col items-center gap-3">
-        <div className="relative flex items-center justify-center w-24 h-24 rounded-3xl bg-primary/10 border-2 border-primary/20">
-          <span className="material-symbols-outlined text-primary text-[52px]">shopping_cart</span>
-          <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary shadow-lg">
-            <span className="material-symbols-outlined text-background-dark text-[14px]">bolt</span>
-          </span>
-        </div>
-        <div className="text-center">
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">FreshCart</h1>
-          <div className="flex items-center justify-center gap-1.5 mt-1">
-            <span className="bg-primary text-background-dark text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest">KAIROS AI</span>
-            <span className="text-slate-400 text-[11px]">Asistente de Compras</span>
-          </div>
-        </div>
-      </div>
+      {/* Content — centered */}
+      <div className="flex-1 flex flex-col justify-center">
 
-      <div className="w-full max-w-sm flex flex-col gap-3">
+        {/* Wordmark */}
+        <div className="mb-12">
+          <p className="text-xs font-semibold text-slate-300 dark:text-zinc-700 uppercase tracking-widest mb-3">FreshCart</p>
+          <h1 className="text-4xl font-black text-slate-900 dark:text-white leading-none mb-2">
+            Compra<br />más inteligente.
+          </h1>
+          <p className="text-slate-400 dark:text-zinc-500 text-sm">
+            Compara precios en tiempo real entre supermercados.
+          </p>
+        </div>
 
-        {isNative && (
-          <button onClick={handleNativeGoogleSignIn} disabled={googleLoading}
-            className="w-full h-14 flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl font-semibold text-slate-700 dark:text-slate-200 text-base shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95 transition-all disabled:opacity-60">
-            {googleLoading
-              ? <span className="material-symbols-outlined text-[22px] animate-spin text-primary">progress_activity</span>
-              : <GoogleLogo />}
-            {googleLoading ? 'Conectando...' : 'Continuar con Google'}
+        {/* Actions */}
+        <div className="flex flex-col gap-3">
+          {isNative && (
+            <button
+              onClick={handleNativeGoogleSignIn}
+              disabled={googleLoading}
+              className="w-full h-14 flex items-center justify-center gap-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold rounded-xl active:scale-[0.98] transition-all disabled:opacity-60 text-[15px]"
+            >
+              {googleLoading
+                ? <span className="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
+                : <GoogleLogo size={20} />}
+              {googleLoading ? 'Conectando...' : 'Continuar con Google'}
+            </button>
+          )}
+
+          {hasWebGoogle && <div ref={googleBtnRef} className="flex justify-center" style={{ minHeight: 44 }} />}
+
+          {loginError && <p className="text-red-500 text-sm text-center">{loginError}</p>}
+
+          <button
+            onClick={() => setShowGuestInfo(true)}
+            className="w-full h-12 flex items-center justify-center text-slate-400 dark:text-zinc-500 text-sm hover:text-slate-600 dark:hover:text-zinc-300 transition-colors"
+          >
+            Explorar sin cuenta
           </button>
-        )}
-
-        {hasWebGoogle && <div ref={googleBtnRef} className="flex justify-center" style={{ minHeight: 44 }} />}
-
-        {loginError && (
-          <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl px-4 py-3">
-            <span className="material-symbols-outlined text-red-500 text-[18px]">error</span>
-            <p className="text-red-600 dark:text-red-400 text-sm">{loginError}</p>
-          </div>
-        )}
-
-        <button onClick={() => setShowGuestInfo(true)}
-          className="w-full h-11 flex items-center justify-center gap-2 text-slate-400 dark:text-slate-500 text-sm hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-          <span className="material-symbols-outlined text-[17px]">explore</span>
-          Explorar sin cuenta
-        </button>
+        </div>
 
       </div>
 
-      <p className="absolute bottom-6 right-6 text-slate-300 dark:text-slate-700 text-[10px]">
-        KAIROS Shield · JWT
-      </p>
     </div>
   );
 };
