@@ -55,7 +55,7 @@ const HomeHeader: React.FC<HomeHeaderProps> = ({
         <div className="relative" ref={userMenuRef}>
           <button
             onClick={() => setShowUserMenu(v => !v)}
-            className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-primary/30 bg-primary/10 text-primary active:scale-90 transition-transform"
+            className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 active:scale-90 transition-transform"
           >
             <span className="material-symbols-outlined text-[24px]">person</span>
           </button>

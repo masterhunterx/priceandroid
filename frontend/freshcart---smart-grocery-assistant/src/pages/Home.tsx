@@ -338,31 +338,26 @@ const Home: React.FC = () => {
         {!loading && heroItem && (
           <div
             onClick={() => navigate(`/product/${heroItem.product_id}`)}
-            className="mx-4 mt-4 rounded-2xl overflow-hidden cursor-pointer active:scale-[0.98] transition-transform relative"
-            style={{ background: 'linear-gradient(135deg, #0d2818 0%, #0d1117 60%, #1a2e22 100%)' }}
+            className="mx-4 mt-4 rounded-2xl overflow-hidden cursor-pointer active:scale-[0.98] transition-transform bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm"
           >
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute top-0 right-0 size-48 bg-primary rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-            </div>
-            <div className="relative flex items-center gap-4 p-4">
-              <div className="size-24 shrink-0 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden border border-white/10">
+            {/* Borde superior del color de la tienda — única línea de color */}
+            <div className="h-0.5 w-full bg-primary" />
+            <div className="flex items-center gap-4 p-4">
+              <div className="size-24 shrink-0 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center overflow-hidden">
                 <img src={heroItem.image_url} alt={heroItem.product_name} className="size-20 object-contain" loading="lazy" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="material-symbols-outlined text-primary text-[14px]">psychology</span>
-                  <span className="text-primary text-[10px] font-black uppercase tracking-widest">Mejor deal hoy</span>
-                </div>
-                <h3 className="text-white font-bold text-sm leading-tight line-clamp-2 mb-2">{heroItem.product_name}</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Mejor deal hoy</p>
+                <h3 className="text-slate-900 dark:text-white font-bold text-sm leading-tight line-clamp-2 mb-2">{heroItem.product_name}</h3>
                 <div className="flex items-baseline gap-2">
                   <span className="text-primary text-2xl font-black">{formatCurrency(heroItem.price)}</span>
                   {heroItem.list_price && (
-                    <span className="text-white/40 text-sm line-through">{formatCurrency(heroItem.list_price)}</span>
+                    <span className="text-slate-400 text-sm line-through">{formatCurrency(heroItem.list_price)}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <StoreLogo slug={heroItem.store_slug} name={heroItem.store_name} className="size-4" />
-                  <span className="text-white/60 text-[11px]">{heroItem.store_name}</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-[11px]">{heroItem.store_name}</span>
                   {heroItem.discount_percent && (
                     <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                       -{Math.round(heroItem.discount_percent)}%
@@ -388,7 +383,7 @@ const Home: React.FC = () => {
                   onClick={() => navigate(`/search?category=${encodeURIComponent(CATEGORY_SEARCH_OVERRIDES[cat.name] ?? cat.name)}${selectedStore ? `&store=${selectedStore}` : ''}`)}
                   className="flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 active:bg-primary/10 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[14px] text-primary">{getCategoryIcon(cat.name)}</span>
+                  <span className="material-symbols-outlined text-[14px] text-slate-400">{getCategoryIcon(cat.name)}</span>
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">{cat.name}</span>
                 </button>
               ))
@@ -396,7 +391,7 @@ const Home: React.FC = () => {
             {!loading && categories.length > 8 && (
               <button
                 onClick={() => navigate('/categories')}
-                className="flex h-8 shrink-0 items-center gap-1 rounded-full px-3 border border-primary/30 bg-primary/5 text-primary"
+                className="flex h-8 shrink-0 items-center gap-1 rounded-full px-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400"
               >
                 <span className="text-xs font-bold">Ver más</span>
                 <span className="material-symbols-outlined text-[14px]">chevron_right</span>
@@ -549,7 +544,7 @@ const Home: React.FC = () => {
             <button
               onClick={handleRefreshDeals}
               disabled={refreshingDeals || searchingDeals}
-              className="flex items-center justify-center size-8 rounded-full bg-primary/10 text-primary border border-primary/20 active:scale-90 transition-all disabled:opacity-40"
+              className="flex items-center justify-center size-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 active:scale-90 transition-all disabled:opacity-40"
             >
               <span className={`material-symbols-outlined text-[18px] ${refreshingDeals ? 'animate-spin' : ''}`}>refresh</span>
             </button>

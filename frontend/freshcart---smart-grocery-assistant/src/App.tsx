@@ -41,6 +41,7 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, isGuest, logout } = useAuth();
+  const { theme } = useTheme();
 
   useEffect(() => {
     function onForceLogout() {
@@ -58,14 +59,16 @@ const AppContent: React.FC = () => {
     <>
       {!isAppReady && !isLoginPage && !isStoreSelectPage && <SplashScreen onComplete={() => setIsAppReady(true)} />}
       <div className={`max-w-md mx-auto min-h-screen relative pb-24 text-slate-900 dark:text-slate-100 transition-opacity duration-700 ${(isAppReady || isLoginPage || isStoreSelectPage) ? 'opacity-100' : 'opacity-0'}`}>
-        {/* Gradient glow from store brand color — sits behind all content */}
-        <div style={{
-          position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)',
-          width: '100%', maxWidth: '448px', height: '320px',
-          background: 'linear-gradient(180deg, var(--store-gradient) 0%, transparent 100%)',
-          pointerEvents: 'none', zIndex: 0,
-          transition: 'background 0.6s ease',
-        }} />
+        {/* Gradient glow — dark mode only, no colored bg in light mode */}
+        {theme === 'dark' && (
+          <div style={{
+            position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)',
+            width: '100%', maxWidth: '448px', height: '320px',
+            background: 'linear-gradient(180deg, var(--store-gradient) 0%, transparent 100%)',
+            pointerEvents: 'none', zIndex: 0,
+            transition: 'background 0.6s ease',
+          }} />
+        )}
 
         <AnimatePresence mode="wait">
           {/* key en el wrapper para que AnimatePresence detecte cambios de ruta */}
